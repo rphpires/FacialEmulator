@@ -195,7 +195,11 @@ class Service():
                 print(f'Emulator PATH already exists, PORT: {port}')
 
             ## Check emulator executable file
-            target_file = os.path.join(f'./{running_path}/{port}', f'{os.path.splitext(EMULATOR_BASE_FILE)[0]}_{port}{os.path.splitext(EMULATOR_BASE_FILE)[1]}')
+            target_file = os.path.join(
+                f'./{running_path}/{port}', 
+                f'{os.path.splitext(EMULATOR_BASE_FILE)[0]}_{port}{os.path.splitext(EMULATOR_BASE_FILE)[1]}'
+            )
+            
             if not os.path.exists(target_file):
                 shutil.copy2(
                     os.path.join(EMULATOR_DIST_PATH, EMULATOR_BASE_FILE), ## Source file
