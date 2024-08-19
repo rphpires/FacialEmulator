@@ -4,9 +4,9 @@ from GlobalFunctions import check_os
 EMULATOR_DIST_PATH = "dist"
 
 if check_os() == 'Linux':
-    EMULATOR_BASE_FILE = "facial_emulator"
+    EMULATOR_BASE_FILE = "facial_emulator_unix"
 elif check_os() == 'Windows':
-    EMULATOR_BASE_FILE = "facial_emulator.exe"
+    EMULATOR_BASE_FILE = "facial_emulator_win.exe"
 
 
 DAHUA_CONTROLLER_TYPES = [

@@ -6,7 +6,7 @@ import subprocess
 import threading
 
 from fastapi import FastAPI, Response, Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -37,6 +37,8 @@ class Service():
         # self.app.mount("/static", StaticFiles(directory="static"), name="static")
         self.templates = Jinja2Templates(directory="templates")
 
+   
+
         ## ---------------------------------------
         ## ---------- Interface Methods ----------
         ## ---------------------------------------
@@ -51,6 +53,7 @@ class Service():
         async def start_emulators(request: Request):
             print('>>> Starting Emulators')
             self.start_emulators()
+            return RedirectResponse(url="/")
             return self.templates.TemplateResponse(
                 request=request, name='devices.html'
             )
@@ -59,6 +62,7 @@ class Service():
         async def stop_emulators(request: Request):
             print('>>> Stoping Emulators')
             self.stop_emulators()
+            return RedirectResponse(url="/")
             return self.templates.TemplateResponse(
                 request=request, name='devices.html'
             )
@@ -66,10 +70,21 @@ class Service():
         @self.app.get("/refresh", response_class=HTMLResponse)
         async def refresh_emulators(request: Request):
             print('>>> Refreshing database')
-            self.stop_emulators()
+            self.refresh_configured_devices()
+            return RedirectResponse(url="/")
             return self.templates.TemplateResponse(
                 request=request, name='devices.html'
             )
+
+        @self.app.get("/recreate", response_class=HTMLResponse)
+        async def recreate_emulators(request: Request):
+            print('>>> Recreating emulator executable')
+            self.recreate_emulator_files()
+            return RedirectResponse(url="/")
+            return self.templates.TemplateResponse(
+                request=request, name='devices.html'
+            )
+
 
 
         ## ---------------------------------
@@ -178,6 +193,7 @@ class Service():
         print(wxs_controllers_dit)
 
 
+
     def check_emulator_path(self, port):
         try:
             running_path = 'running'
@@ -197,9 +213,12 @@ class Service():
             ## Check emulator executable file
             target_file = os.path.join(
                 f'./{running_path}/{port}', 
-                f'{os.path.splitext(EMULATOR_BASE_FILE)[0]}_{port}{os.path.splitext(EMULATOR_BASE_FILE)[1]}'
+                f'{os.path.splitext(EMULATOR_BASE_FILE)[0]}_{port}{os.path.splitext(EMULATOR_BASE_FILE)[1]}'.replace('_unix', '').replace('_win', '')
             )
-            
+
+            if not os.path.exists(os.path.join(EMULATOR_DIST_PATH, EMULATOR_BASE_FILE)):
+                self.recreate_emulator_files()
+
             if not os.path.exists(target_file):
                 shutil.copy2(
                     os.path.join(EMULATOR_DIST_PATH, EMULATOR_BASE_FILE), ## Source file
@@ -281,15 +300,15 @@ class Service():
 
     def recreate_emulator_files(self):
         serv.stop_emulators()
-        sleep_print(3, 'recreate_emulator_files')
+        # sleep_print(3, 'recreate_emulator_files')
         try:
             if check_os() == 'Linux':
-                cmd_path = '/home/invenzi/.local/bin/pyinstaller'
+                cmd_path = 'pyinstaller'
             elif check_os() == 'Windows':
-                cmd_path = '/home/invenzi/.local/bin/pyinstaller'
+                cmd_path = 'pyinstaller'
             
             result = subprocess.run(
-                [cmd_path, '--onefile', 'facial_emulator.py'], 
+                [cmd_path, '--onefile', 'facial_emulator.py', f'--name={EMULATOR_BASE_FILE}'], 
                 capture_output=True, 
                 text=True
             )
@@ -313,7 +332,7 @@ class Service():
         trace('New exe created.')
 
         self.delete_emulator_folder_content()
-        self.start_emulators()
+        #self.start_emulators()
         
     def delete_folder_content_2(self):
         # Caminho para o script shell
@@ -337,14 +356,16 @@ class Service():
             return
 
         try:
-            for filename in os.listdir(directory_path):
-                file_path = os.path.join(directory_path, filename)
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # Remove arquivo ou link simbólico
-                    print(f"Arquivo {file_path} removido.")
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove diretório e seu conteúdo
-                    print(f"Diretório {file_path} removido.")
+            root_dir = os.path.join(os.path.dirname(__file__), 'running')
+            for subdir, _, files in os.walk(root_dir):
+                for file in files:
+                    if 'facial_emulator' in file:
+                        file_path = os.path.join(subdir, file)
+                        try:
+                            os.remove(file_path)
+                        except Exception as ex:
+                            report_exception(ex)
+
         except Exception as e:
             print(f"Erro ao excluir arquivos: {e}")
 
@@ -378,8 +399,9 @@ print(__os)
 
 if __name__ == '__main__':
     serv = Service()
-    #serv.refresh_configured_devices()
-    #serv.start_emulators()
+    # serv.refresh_configured_devices()
+    # serv.start_emulators()
+    serv.check_emulator_path(8010)
 
     serv.run_server()
     # serv.refresh_configured_devices()
