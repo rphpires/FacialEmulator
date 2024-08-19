@@ -1,0 +1,7 @@
+venv
+**/__pycache__/
+TraceEmulator
+.pyarmor_capsule.zip
+pyarmor-regfile-1.zip
+build
+running

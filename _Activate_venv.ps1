@@ -1,0 +1,1 @@
+.\venv-emulator\Scripts\Activate.ps1
