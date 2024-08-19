@@ -523,7 +523,6 @@ class HikvisionEmulator(threading.Thread):
 
         self.mac_address = generate_mac_address()
 
-        
         @staticmethod 
         def handle_response(content, response_code = 200, latency_sleep=50):
             response = Response(content=content, status_code=response_code)
@@ -540,6 +539,18 @@ class HikvisionEmulator(threading.Thread):
             ret = {key: value for key, value in kwargs.items() if value is not None}
             return Response(content=json.dumps(ret, indent=2), status_code=response_code, media_type="application/json")
             #return JSONResponse(content=json.dumps(ret, indent=2), status_code=response_code, media_type="application/json")
+
+
+        ## Custom endpoint to check emulator status
+        @self.app.get('/emulator/get-status')
+        async def get_device_status(request: Request):
+            try:
+                trace("/emulator/get-status: connect")
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                return {"CurrentDatetime": current_time}
+
+            except Exception as ex:
+                report_exception()
 
         ## ---------------------------------------------------------------
         ## ------------------------ AccessControl ------------------------

@@ -4,6 +4,7 @@ import requests
 import shutil
 import subprocess
 import threading
+import schedule
 
 from fastapi import FastAPI, Response, Request
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
@@ -43,12 +44,14 @@ class Service():
         ## ---------- Interface Methods ----------
         ## ---------------------------------------
 
+        # class Devices()
+
         @self.app.get("/", response_class=HTMLResponse)
         async def main_page(request: Request):
-            return self.templates.TemplateResponse(
-                request=request, name='devices.html'
-            )
-        
+            context = {"request": request, "devices": self.get_current_devices()}
+            return self.templates.TemplateResponse('devices.html', context )
+       
+
         @self.app.get("/start", response_class=HTMLResponse)
         async def start_emulators(request: Request):
             print('>>> Starting Emulators')
@@ -80,11 +83,7 @@ class Service():
         async def recreate_emulators(request: Request):
             print('>>> Recreating emulator executable')
             self.recreate_emulator_files()
-            return RedirectResponse(url="/")
-            return self.templates.TemplateResponse(
-                request=request, name='devices.html'
-            )
-
+            return RedirectResponse(url="/?recreate=true")
 
 
         ## ---------------------------------
@@ -115,6 +114,29 @@ class Service():
             self.refresh_configured_devices()
             return {"response": "Stop Emulators command: OK"}
 
+
+
+    ## -------------------------------------
+    ## ---------- Class Functions ----------
+    ## -------------------------------------
+
+    def get_current_devices(self):
+        current_devices = []
+        result = self.service_db.select(f"select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled from Main;")
+        if result:
+            for lc_id, name, ip, port, model, status, enabled in result:
+                current_devices.append({
+                    "lc_id": lc_id,
+                    "name": name,
+                    "ip_address": ip,
+                    "port": port,
+                    "model": model,
+                    "status": status,
+                    "enabled": enabled
+                })
+
+        return current_devices
+    
 
     def get_missing_keys(self, local_devices, wxs_controllers_dit):
         # Obter as chaves de ambos os dicionários
@@ -184,7 +206,7 @@ class Service():
             else:
                 self.service_db.execute(
                     'INSERT INTO Main values (?,?,?,?,?,?,?,?,?,?)', 
-                    (key, wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], 0, 0, 0)
+                    (key, wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], 'stopped', 0, 0)
                 )
 
         for id in self.get_missing_keys(local_devices, wxs_controllers_dit):
@@ -376,32 +398,52 @@ class Service():
         self.service_db.join()
 
 
-    # def run(self):
-    #     trace('Innitializing service')
-    #     # self.run_server()
+    def refresh_device_status(self): #TODO: Implement function
+        for dev in self.get_current_devices():
+            try:
+                get_status = requests.get(f'http://{dev["ip_address"]}:{dev["port"]}/emulator/get-status', timeout=2)
+                if get_status.status_code in [200]:
+                    print(f'****** {dev["ip_address"]}:{dev["port"]} = OK | Current Status= {dev["status"]}')
+                    if dev["status"] != "running":
+                        self.service_db.execute(f"update Main set status = 'running' where LocalControllerID = {dev['lc_id']};")
+                else:
+                    print(f'Failed or offline: {dev["ip_address"]}:{dev["port"]} = {get_status.status_code}')
+                    if dev["status"] != "stopped":
+                        self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {dev['lc_id']};")
 
-    #     serv.refresh_configured_devices()
+            except requests.exceptions.RequestException  as ex:
+                print(f'Failed or offline: {dev["ip_address"]}:{dev["port"]} | Current Status= {dev["status"]}')
+                if dev["status"] != "stopped":
+                    self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {dev['lc_id']};")
+
+
+    def scheduler(self):
+        schedule.every(10).seconds.do(self.refresh_device_status)
+        while True:
+            schedule.run_pending()   
+            time.sleep(1)
 
     def run_server(self):
         trace('Innitializing WebService...')
+
+        ## Start Thread to scheduled functions
+        threading.Thread(target=self.scheduler).start()
+
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
         uvicorn.run(self.app, host=self.ip, port=self.port)
 
+    
 
-def sleep_print(tempo, msg=""):
-    for t in range(tempo):
-        print(f'[{msg}] Sleep: {t}')
-        time.sleep(t)
 
 __os = check_os()
 print(__os)
 
 if __name__ == '__main__':
     serv = Service()
-    # serv.refresh_configured_devices()
+    serv.refresh_configured_devices()
     # serv.start_emulators()
-    serv.check_emulator_path(8010)
+    # serv.check_emulator_path(8010)
 
     serv.run_server()
     # serv.refresh_configured_devices()

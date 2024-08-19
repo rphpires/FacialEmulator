@@ -20,7 +20,7 @@ if __name__ == "__main__":
         trace(f'Args: {sys.argv}')
         if len(sys.argv) == 1: ## Debug Mode
             print("Required: python facial_emulator.py <IP Address> <port> <Device Type>")
-            ip = '172.16.17.135'
+            ip = '172.16.17.47'
             port = 8010
             device_type = 'Hikvision'
             event_freq = 10 ## Seconds

@@ -361,6 +361,16 @@ class DahuaEmulator(threading.Thread):
             # trace('---- End sleep ----')
             return response
 
+        ## Custom endpoint to check emulator status
+        @self.app.get('/emulator/get-status')
+        async def get_device_status(request: Request):
+            try:
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                return {"CurrentDatetime": current_time}
+
+            except Exception as ex:
+                report_exception()
+            
         ### -------------------------------  Global -----------------------------
         @self.app.get('/cgi-bin/global.cgi')
         async def GetGobal(action: str=None, time: str=None):

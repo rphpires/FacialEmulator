@@ -4,36 +4,66 @@
 
 <div class="container mt-4">
     <h3 class="display-8">Dispositivos</h3>
-  
-    <table class="table table-striped table-hover">
+
+    <table class="table table-striped table-hover" id="device-table">
         <thead>
             <tr>
-              <th scope="col">#</th>
-              <th scope="col">First</th>
-              <th scope="col">Last</th>
-              <th scope="col">Handle</th>
+              <th scope="col">LocalControllerID</th>
+              <th scope="col">Nome</th>
+              <th scope="col">Port</th>
+              <th scope="col">Status</th>
+              <th scope="col">Commands</th>
+              <th scope="col">
+                <input type="checkbox" id="select-all" />
+              </th>
+              
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <th scope="row">1</th>
-              <td>Mark</td>
-              <td>Otto</td>
-              <td>@mdo</td>
-            </tr>
-            <tr>
-              <th scope="row">2</th>
-              <td>Jacob</td>
-              <td>Thornton</td>
-              <td>@fat</td>
-            </tr>
-            <tr>
-              <th scope="row">3</th>
-              <td colspan="2">Larry the Bird</td>
-              <td>@twitter</td>
-            </tr>
+            {% for dev in devices %}
+              <tr>
+                <th scope="row">{{ dev.lc_id }}</th>
+                <td>{{ dev.name }}</td>
+                <td>{{ dev.port }}</td>
+                <td>{{ dev.status }}</td>
+                <td>Commands</td>
+                <td>
+                  <input type="checkbox" class="device-checkbox" />
+                </td>
+              </tr>
+            {% endfor %}
           </tbody>
     </table>
 
+</div>
+
+<!-- Script to handle checkbox selection -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const selectAllCheckbox = document.getElementById('select-all');
+    const deviceCheckboxes = document.querySelectorAll('.device-checkbox');
+
+    function setAllCheckboxes(checked) {
+      deviceCheckboxes.forEach(checkbox => {
+        checkbox.checked = checked;
+      });
+    }
+    
+    selectAllCheckbox.addEventListener('change', (event) => {
+      setAllCheckboxes(event.target.checked);
+    });
+
+    deviceCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const allChecked = Array.from(deviceCheckboxes).every(checkbox => checkbox.checked);
+        selectAllCheckbox.checked = allChecked;
+      });
+    });
+  });
+</script>
+
+<style>
+  /* Add your CSS styles if needed */
+</style>
 
 {% endblock %}
