@@ -335,6 +335,14 @@ class Service():
         serv.stop_emulators()
         # sleep_print(3, 'recreate_emulator_files')
         try:
+            try:
+                build_dir = os.path.join(os.path.dirname(__file__), 'build')
+                trace(f'Before recreate executable, delete "build" path: {build_dir}')
+                shutil.rmtree(build_dir)
+                
+            except Exception as ex:
+                report_exception(ex)
+
             if check_os() == 'Linux':
                 cmd_path = 'pyinstaller'
             elif check_os() == 'Windows':

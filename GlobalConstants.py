@@ -10,13 +10,14 @@ elif check_os() == 'Windows':
 
 
 DAHUA_CONTROLLER_TYPES = [
+    22111, # DHI-ASI7213X-T1
     22121, # DHI-ASI7213Y-V3 
-    22131
+    22131  # DHI-ASI7214Y-V3
 ]
 
 HIKVISION_CONTROLLER_TYPES = [
-    21101, # 671
-    21102  # 673
+    21101, # DS-K1T671
+    21102  # DS-K1T673
 ]
 
 

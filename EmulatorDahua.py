@@ -322,7 +322,7 @@ Content-Disposition: form-data; name="info"\r
 class DahuaEmulator(threading.Thread):
     def __init__(self, ip, port, db_handler, event_freq) -> None:
         threading.Thread.__init__(self)
-        trace(f'Innitializing emulator model: "Dahua" v1.0')
+        trace(f'Innitializing emulator model: "Dahua" v1.1')
         self.ip = ip
         self.port = port
         self.generated_event_frequency = event_freq
@@ -417,7 +417,8 @@ table.Network.eth0.SubnetMask=255.255.248.0
                     case "setConfig":
                         trace(f'SetConfig: {request.query_params}')
                         self.remote_server = request.query_params["PictureHttpUpload.UploadServerList[0].Address"]
-                        self.remote_port = request.query_params["PictureHttpUpload.UploadServerList[0].Address"]
+                        self.remote_port = request.query_params["PictureHttpUpload.UploadServerList[0].Port"]
+                        self.remote_server_url = f'http://{self.remote_server}:{self.remote_port}'
 
                         trace(f'Set LocalAuthentication: PictureHttpUpload.Enable= {request.query_params["PictureHttpUpload.Enable"]}')
 
@@ -652,7 +653,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
         
         if evt_package and self.dahua.get_settings("LocalAuthentication") == '0':
             try:
-                trace("Sending online event")
+                trace(f"Sending online event to server: {self.remote_server_url}/notification")
                 gen_evt = requests.post(self.remote_server_url + '/notification', data=evt_package, timeout=5)
                 trace(f'Generated online event reply: {gen_evt.content}')
                 if gen_evt.status_code:
