@@ -57,19 +57,15 @@ class Service():
             print('>>> Starting Emulators')
             self.start_emulators()
             return RedirectResponse(url="/")
-            return self.templates.TemplateResponse(
-                request=request, name='devices.html'
-            )
+
         
         @self.app.get("/stop", response_class=HTMLResponse)
         async def stop_emulators(request: Request):
             print('>>> Stoping Emulators')
             self.stop_emulators()
             return RedirectResponse(url="/")
-            return self.templates.TemplateResponse(
-                request=request, name='devices.html'
-            )
-        
+            
+
         @self.app.get("/refresh", response_class=HTMLResponse)
         async def refresh_emulators(request: Request):
             print('>>> Refreshing database')
@@ -122,9 +118,9 @@ class Service():
 
     def get_current_devices(self):
         current_devices = []
-        result = self.service_db.select(f"select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled from Main;")
+        result = self.service_db.select(f"select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventInterval from Main;")
         if result:
-            for lc_id, name, ip, port, model, status, enabled in result:
+            for lc_id, name, ip, port, model, status, enabled, interval in result:
                 current_devices.append({
                     "lc_id": lc_id,
                     "name": name,
@@ -132,7 +128,8 @@ class Service():
                     "port": port,
                     "model": model,
                     "status": status,
-                    "enabled": enabled
+                    "enabled": enabled,
+                    "interval": interval
                 })
 
         return current_devices
@@ -153,45 +150,58 @@ class Service():
         current_controllers = []
         wxs_controllers_dit = {}
 
-        for ctr_types in [ DAHUA_CONTROLLER_TYPES, HIKVISION_CONTROLLER_TYPES]:
-            result = sql.read_data(f"""
-                SELECT 
-                    LocalControllerID, 
-                    LocalControllerName, 
-                    IPAddress, 
-                    BaseCommPort, 
-                    LocalControllerEnabled,
-                    LocalControllerType 
-                FROM CfgHWLocalControllers
-                WHERE LocalControllerType in ({', '.join(str(x) for x in ctr_types)})
-                AND LocalControllerEnabled = 1;
-            """)
-            # print(result)
-            if result:
-                current_controllers += result
+        result = sql.read_data(f"""
+            SELECT 
+                LocalControllerID, 
+                LocalControllerName, 
+                IPAddress, 
+                BaseCommPort, 
+                LocalControllerEnabled,
+                LocalControllerType,
+                LocalControllerDescription 
+            FROM CfgHWLocalControllers
+            WHERE LocalControllerDescription like 'emulator%';
+        """)
+        # print(result)
+        if not result:
+            trace("There aren't available controllers to be create as emulators.")
+            return False
 
-        for id, name, ip, port, enabled, type in current_controllers:
+        for id, name, ip, port, enabled, type, description in result:
+            if type not in DAHUA_CONTROLLER_TYPES + HIKVISION_CONTROLLER_TYPES:
+                trace(f'Skipping LocaController "{name}", because LocalControllerType is not valid.')
+                continue
+
+            if len(description.split('_')) == 2:
+                try:
+                    event_interval = int(description.split('_')[1])
+                except Exception as ex:
+                    trace(f'Error getting event time interval, description= {description}')
+                    event_interval = 0
+
             wxs_controllers_dit[id] = {
                 'name': name,
                 'ip': ip,
                 'port': port,
                 'type': type,
                 'enabled': 1 if enabled else 0,
+                'interval': event_interval,
                 'model': 'Hikvision' if type in HIKVISION_CONTROLLER_TYPES else 'Dahua' if type in DAHUA_CONTROLLER_TYPES else ' - '
             }
 
-        get_local_lcs = "SELECT LocalControllerID, Name, IPAddress, Port, Model, Enabled, Type FROM Main;"
+        get_local_lcs = "SELECT LocalControllerID, Name, IPAddress, Port, Model, Enabled, Type, EventInterval FROM Main;"
         local_devices = {}
 
         if (ret := self.service_db.select(get_local_lcs)):
-            for id, name, ip, port, model, enabled, type in ret:
+            for id, name, ip, port, model, enabled, type, interval in ret:
                 local_dev = {
                     'name': name,
                     'ip': ip,
                     'port': port,
                     'type': type,
                     'enabled': enabled,
-                    'model': model
+                    'model': model,
+                    'interval' : interval
                 }
                 local_devices[id] = local_dev
 
@@ -200,13 +210,13 @@ class Service():
                 difference = [ field for field in local_dev.keys() if dev[field] != wxs_dev[field] ]
                 if difference:
                     self.service_db.execute(
-                        'update Main set Name= ?, IPAddress= ?, Port= ?, Model= ?, Enabled= ?, Type= ? Where LocalControllerID= ?;', 
-                        (wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], key)
+                        'update Main set Name= ?, IPAddress= ?, Port= ?, Model= ?, Enabled= ?, Type= ?, EventInterval= ? Where LocalControllerID= ?;', 
+                        (wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], wxs_dev["interval"], key)
                 )
             else:
                 self.service_db.execute(
                     'INSERT INTO Main values (?,?,?,?,?,?,?,?,?,?)', 
-                    (key, wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], 'stopped', 0, 0)
+                    (key, wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], 'stopped', wxs_dev["interval"], 0)
                 )
 
         for id in self.get_missing_keys(local_devices, wxs_controllers_dit):
@@ -355,16 +365,6 @@ class Service():
 
         self.delete_emulator_folder_content()
         #self.start_emulators()
-        
-    def delete_folder_content_2(self):
-        # Caminho para o script shell
-        shell_script_path = "./delete_content.sh"
-
-        # Tornar o script shell executável (opcional, caso ainda não esteja)
-        subprocess.run(["chmod", "+x", shell_script_path])
-
-        # Executar o script shell
-        subprocess.run([shell_script_path], check=True)
 
 
     def delete_emulator_folder_content(self):
