@@ -77,8 +77,9 @@ class Service():
 
         @self.app.get("/recreate", response_class=HTMLResponse)
         async def recreate_emulators(request: Request):
-            print('>>> Recreating emulator executable')
+            print('>>> Recreating emulator executable: BEGIN')
             self.recreate_emulator_files()
+            print('>>> Recreating emulator executable: END')
             return RedirectResponse(url="/?recreate=true")
 
 

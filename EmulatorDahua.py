@@ -35,13 +35,6 @@ class DahuaHandler():
         self.db_handler = db_handler
         trace('Starting DahuaHandler class...')
 
-    # @staticmethod
-    # async def heartbeat(interval, websocket: WebSocket):
-    #     while True:
-    #         trace('>>>>>>>>>>>>>>>>>>')
-    #         await asyncio.sleep(10)
-    #         await websocket.send_text("Heartbeat")
-
     def get_settings(self, cfg_id):
         ret = self.db_handler.select(f"select value from DeviceSettings where CfgId = '{cfg_id}';")
         if not ret:
@@ -54,9 +47,6 @@ class DahuaHandler():
     def set_settings(self, cfg_id, value):
         trace(f"Update Device settings, set {cfg_id} = {value}")
         self.db_handler.execute(f"UPDATE DeviceSettings SET value = '{value}' WHERE CfgID = '{cfg_id}'")
-
-    # def generate_event(self):
-    #     return
 
     def add_card(self, CardName, UserID, CardNo, ValidDateStart, ValidDateEnd):
         try:
@@ -166,7 +156,7 @@ records[{i}].ValidDateStart={ValidDateStart}
         return record
 
     def generate_random_event(self):
-        trace('generate_random_event')
+        trace('generate_local_event')
         evt = self.db_handler.select("SELECT CardName, CardNo FROM DahuaCard ORDER BY RANDOM() LIMIT 1;")
         if not evt:
             return False
@@ -365,6 +355,7 @@ class DahuaEmulator(threading.Thread):
         @self.app.get('/emulator/get-status')
         async def get_device_status(request: Request):
             try:
+                trace("/emulator/get-status: connect")
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 return {"CurrentDatetime": current_time}
 
@@ -627,7 +618,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
         self.genereted_event_counter = time.time()
 
         while True:
-            trace(f'## Offline heartbeat e evento')
+            trace(f'## StandAlone heartbeat and event')
             now = time.time()
             if self.generated_event and (now - self.genereted_event_counter >= self.generated_event_frequency):
                 trace(f'>> Sending Generated Fake Event <<')

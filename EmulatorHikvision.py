@@ -4,6 +4,7 @@ import asyncio
 import json
 import requests
 import base64
+import xmltodict
 
 from fastapi import FastAPI, Response, WebSocket, Request, Body, Query, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -325,7 +326,7 @@ JOIN HikvisionCard c ON c.employeeNo = u.employeeNo
 ORDER BY RANDOM() LIMIT 1;""")
         
         if not evt:
-            trace(f'generate_random_event: Nenhum evento no banco de dados.')
+            trace(f"generate_random_event: skipping, there's no user in current database.")
             return False
         
         (Name, CardNo, EmployeeNo) = evt[0]
@@ -520,6 +521,7 @@ class HikvisionEmulator(threading.Thread):
 
         self.generated_event_frequency = event_freq
         self.generated_event = True if event_freq >= 1 else False
+        self.local_authentication_value = '1'
 
         self.mac_address = generate_mac_address()
 
@@ -573,7 +575,7 @@ class HikvisionEmulator(threading.Thread):
                     "uploadVerificationPic": True,
                     "saveVerificationPic": True,
                     "saveFacePic": False,
-                    "remoteCheckDoorEnabled": True,
+                    "remoteCheckDoorEnabled": True if self.local_authentication_value == '1' else False,
                     "remoteStandaloneEnabled": True,
                     "remoteCheckSet": 0,
                     "checkChannelType": "ISAPIListen",
@@ -588,8 +590,8 @@ class HikvisionEmulator(threading.Thread):
             try:
                 body = payload["AcsCfg"]
                 trace(f'Setting online mode: {body["remoteCheckDoorEnabled"]}')
-                local_authentication_value = "0" if body["remoteCheckDoorEnabled"] else "1"
-                self.hikvision.set_settings("LocalAuthentication", local_authentication_value)
+                self.local_authentication_value = "0" if body["remoteCheckDoorEnabled"] else "1"
+                self.hikvision.set_settings("LocalAuthentication", self.local_authentication_value)
                 xml_content = """
 <?xml version="1.0" encoding="UTF-8"?>
 <ResponseStatus version="1.0" xmlns="http://www.hikvision.com/ver10/XMLSchema">
@@ -622,7 +624,7 @@ class HikvisionEmulator(threading.Thread):
 """
             return Response(content=xml_response_content, media_type="application/xml")
 
-        @self.app.put(ac_url + "/RemoteControl/door/{output_id}") ## TODO: Test
+        @self.app.put(ac_url + "/RemoteControl/door/{output_id}") ## TODO: Check 422 Unprocessable Entity
         async def command_door(output_id: int, item: dict):
             trace(f'New command received to output= {output_id}')
             xml_response_content = """
@@ -865,7 +867,13 @@ class HikvisionEmulator(threading.Thread):
 
         @self.app.get(system_url + "/time") # OK
         async def get_datetime():
-            return "OK"
+            trace('Polling message received')
+            return """
+<?xml version="1.0" encoding="UTF-8"?>
+<DeviceInfo version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+    <deviceStatus>OK</deviceStatus>
+</DeviceInfo>
+"""
         
         @self.app.put(system_url + "/time") # OK
         async def set_datetime():
@@ -913,13 +921,12 @@ class HikvisionEmulator(threading.Thread):
         ## ---------------------------------------------------------------
         ## --------------------------- Events ----------------------------
         ## ---------------------------------------------------------------
-        system_url = "/ISAPI/Event/notification"
+        event_url = "/ISAPI/Event/notification"
 
-        @self.app.get(system_url + "/httpHosts") ## TODO: Implement Function
+        @self.app.get(event_url + "/httpHosts")
         async def get_device_info():
             trace('Getting Info httpHosts')
-            xml_content = f"""
-<?xml version="1.0" encoding="UTF-8"?>
+            xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <HttpHostNotificationList version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
     <HttpHostNotification>
         <id>1</id>
@@ -949,9 +956,12 @@ class HikvisionEmulator(threading.Thread):
 """
             return Response(content=xml_content, media_type="application/xml")
 
-        @self.app.put(system_url + "/httpHosts") ## TODO: Implement Function
+        @self.app.put(event_url + "/httpHosts") ## TODO: Implement function
         async def set_device_info(item: dict):
-            ## Body in XML
+            trace(f"Receiving configuration from server")
+
+            server_dict = xmltodict.parse(item)
+
             return "OK"
         
 
@@ -965,7 +975,7 @@ class HikvisionEmulator(threading.Thread):
                 async for chunk in self.agen:
                     yield chunk
 
-        @self.app.get(system_url + "/alertStream") ## TODO: Implement Function
+        @self.app.get(event_url + "/alertStream") ## TODO: Implement Function
         async def GetAlertStream():
             trace(f"[GET] system_url + /alertStream")
             return AsyncGeneratorResponse(self.generate_heartbeat())
@@ -1028,8 +1038,8 @@ Content-Length: {len(content_length)}\r
     ### ------------------------------------------------------------------
     def generate_online_event(self):
         trace('Generating online event.')
-        evt_package, event_reply = self.dahua.generate_online_event(self.mac_address)
-        if evt_package and self.dahua.get_settings("LocalAuthentication") == '0':
+        evt_package, event_reply = self.hikvision.generate_online_event(self.mac_address)
+        if evt_package and self.hikvision.get_settings("LocalAuthentication") == '0':
             try:
                 trace("Sending first online event")
                 gen_evt = requests.post(self.remote_server_url + '/notification', data=evt_package, timeout=5)
