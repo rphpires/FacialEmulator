@@ -739,7 +739,6 @@ table.Network.eth0.SubnetMask=255.255.248.0
     ### ------------------------------------------------------------------
     
     def run(self):
-<<<<<<< HEAD
         try:
             threading.Thread(target=self.scheduler).start()
         except Exception as ex:
@@ -748,17 +747,10 @@ table.Network.eth0.SubnetMask=255.255.248.0
         try:
             ## WebServer innitialization...
             trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-            uvicorn.run(self.app, host=self.ip, port=self.port)
+            uvicorn.run(self.app, host=self.ip, port=self.port, log_config=f"{cwd}/.log.ini")
         except Exception as ex:
             report_exception(ex)
 
-=======
-        threading.Thread(target=self.scheduler).start()
-        ## WebServer innitialization...
-        trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-        cwd = pathlib.Path(__file__).parent.resolve()
-        uvicorn.run(self.app, host=self.ip, port=self.port, log_config=f"{cwd}/.log.ini")
->>>>>>> c83efd87e49a3424fa831cfdef3d7df2c5d30748
         
 def still_running_trace():
     trace('Emulator is still running')
