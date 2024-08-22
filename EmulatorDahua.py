@@ -10,6 +10,7 @@ import asyncio
 import requests
 import schedule
 import json
+import pathlib
 
 from FakeEventImage import photo_img
 
@@ -694,10 +695,12 @@ table.Network.eth0.SubnetMask=255.255.248.0
         threading.Thread(target=self.scheduler).start()
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-        uvicorn.run(self.app, host=self.ip, port=self.port)
+        cwd = pathlib.Path(__file__).parent.resolve()
+        uvicorn.run(self.app, host=self.ip, port=self.port, log_config=f"{cwd}/.log.ini")
         
 
 if __name__ == "__main__":
     port=77
     d = DahuaEmulator(port)
+    cwd = pathlib.Path(__file__).parent.resolve()
     uvicorn.run(d.app, host="localhost", port=port)
