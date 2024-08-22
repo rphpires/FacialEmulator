@@ -20,8 +20,8 @@ if __name__ == "__main__":
         trace(f'Args: {sys.argv}')
         if len(sys.argv) == 1: ## Debug Mode
             print("Required: python facial_emulator.py <IP Address> <port> <Device Type>")
-            ip = '192.168.0.152'
-            port = 77
+            ip = '172.16.17.47'
+            port = 8030
             device_type = 'Dahua'
             event_freq = 10 ## Seconds
         else:

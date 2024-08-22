@@ -5,6 +5,7 @@ import json
 import requests
 import base64
 import xmltodict
+import schedule
 
 from fastapi import FastAPI, Response, WebSocket, Request, Body, Query, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -403,7 +404,7 @@ Content-ID: pictureImage\r
         trace(f"generate_online_event: {mac_address = }")
         
         try:
-            current_datetime = datetime.utcnow()
+            current_datetime = datetime.datetime.now()
             evt = self.db_handler.select("SELECT UserID, CardName, CardNo FROM HikvisionCard ORDER BY RANDOM() LIMIT 1;")
             if not evt:
                 return False
@@ -524,6 +525,11 @@ class HikvisionEmulator(threading.Thread):
         self.local_authentication_value = '1'
 
         self.mac_address = generate_mac_address()
+        self.remote_server = self.hikvision.get_settings("RemoteServer") 
+        self.remote_port = self.hikvision.get_settings("RemotePort") 
+        self.remote_server_url = f'http://{self.remote_server}:{self.remote_port}'
+        trace(f'Starting server URL from database: {self.remote_server_url}')
+
 
         @staticmethod 
         def handle_response(content, response_code = 200, latency_sleep=50):
@@ -1065,24 +1071,28 @@ Content-Length: {len(content_length)}\r
             except Exception as ex:
                 report_exception(ex)
 
-    # def schedule_task(self):
-    #     self.scheduler.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
+    def scheduler(self):
+        # schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
+        schedule.every(5).minutes.do(still_running_trace)
 
-    # def scheduler(self):
-    #     schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
-    #     while True:
-    #         schedule.run_pending()   
-    #         time.sleep(1)
+        while True:
+            schedule.run_pending()   
+            time.sleep(1)
 
     ### ------------------------------------------------------------------
     ### ------------------------ Online events ---------------------------
     ### ------------------------------------------------------------------
     
     def run(self):
-        # threading.Thread(target=self.scheduler).start()
+        threading.Thread(target=self.scheduler).start()
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
         uvicorn.run(self.app, host=self.ip, port=self.port)
+
+        
+def still_running_trace():
+    trace('Emulator is still running')
+
 
 if __name__ == "__main__":
     port=8000
