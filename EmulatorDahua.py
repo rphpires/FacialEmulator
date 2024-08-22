@@ -10,6 +10,7 @@ import asyncio
 import requests
 import schedule
 import json
+import pathlib
 
 from FakeEventImage import photo_img
 
@@ -738,6 +739,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
     ### ------------------------------------------------------------------
     
     def run(self):
+<<<<<<< HEAD
         try:
             threading.Thread(target=self.scheduler).start()
         except Exception as ex:
@@ -750,6 +752,13 @@ table.Network.eth0.SubnetMask=255.255.248.0
         except Exception as ex:
             report_exception(ex)
 
+=======
+        threading.Thread(target=self.scheduler).start()
+        ## WebServer innitialization...
+        trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
+        cwd = pathlib.Path(__file__).parent.resolve()
+        uvicorn.run(self.app, host=self.ip, port=self.port, log_config=f"{cwd}/.log.ini")
+>>>>>>> c83efd87e49a3424fa831cfdef3d7df2c5d30748
         
 def still_running_trace():
     trace('Emulator is still running')
@@ -758,4 +767,5 @@ def still_running_trace():
 if __name__ == "__main__":
     port=77
     d = DahuaEmulator(port)
+    cwd = pathlib.Path(__file__).parent.resolve()
     uvicorn.run(d.app, host="localhost", port=port)
