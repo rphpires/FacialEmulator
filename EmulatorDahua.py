@@ -327,12 +327,13 @@ Content-Disposition: form-data; name="info"\r
             
 
 class DahuaEmulator(threading.Thread):
-    def __init__(self, ip, port, db_handler, event_freq) -> None:
+    def __init__(self, ip, port, db_handler, event_freq, log_init_file) -> None:
         threading.Thread.__init__(self)
         trace(f'Innitializing emulator model: "Dahua" v1.1')
         self.ip = ip
         self.port = port
         self.generated_event_frequency = event_freq
+        self.log_init_file = log_init_file
 
         self.dahua = DahuaHandler(db_handler)
         self.app = FastAPI()
@@ -720,8 +721,6 @@ table.Network.eth0.SubnetMask=255.255.248.0
             except Exception as ex:
                 report_exception(ex)
 
-
-
     def scheduler(self):
         schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
         schedule.every(5).minutes.do(still_running_trace)
@@ -747,7 +746,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
         try:
             ## WebServer innitialization...
             trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-            uvicorn.run(self.app, host=self.ip, port=self.port, log_config=f"{cwd}/.log.ini")
+            uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
         except Exception as ex:
             report_exception(ex)
 

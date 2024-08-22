@@ -509,12 +509,13 @@ class AcsCfg(BaseModel):
     checkChannelType: str | None = ""
 
 class HikvisionEmulator(threading.Thread):
-    def __init__(self, ip, port, db_handler, event_freq) -> None:
+    def __init__(self, ip, port, db_handler, event_freq, log_init_file) -> None:
         threading.Thread.__init__(self)
         trace(f'Innitializing emulator model: "Hikivision".')
         self.ip = ip
         self.port = port
         self.db_handler = db_handler
+        self.log_init_file = log_init_file
         
         self.hikvision = HikvisionHandler(db_handler)
         self.app = FastAPI()
@@ -1087,7 +1088,7 @@ Content-Length: {len(content_length)}\r
         threading.Thread(target=self.scheduler).start()
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-        uvicorn.run(self.app, host=self.ip, port=self.port)
+        uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
 
         
 def still_running_trace():
