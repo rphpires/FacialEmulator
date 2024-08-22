@@ -338,7 +338,8 @@ class Service():
             try:
                 build_dir = os.path.join(os.path.dirname(__file__), 'build')
                 trace(f'Before recreate executable, delete "build" path: {build_dir}')
-                shutil.rmtree(build_dir)
+                if os.path.exists(build_dir):
+                    shutil.rmtree(build_dir)
                 
             except Exception as ex:
                 report_exception(ex)

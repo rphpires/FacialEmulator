@@ -29,7 +29,14 @@
                 <td class="text-center">{{ dev.name }}</td>
                 <td class="text-center">{{ dev.port }}</td>
                 <td class="text-center">{{ dev.interval }}</td>
-                <td class="text-center">Commands</td>
+                <td class="text-center">
+                  <a href="#" class="btn btn-outline-success btn-sm {% if dev.status == 'running' %}btn-custom-disabled{% endif %}">
+                    <i class="bi bi-play-fill"></i>
+                  </a>
+                  <a href="#" class="btn btn-outline-danger btn-sm {% if dev.status == 'stopped' %}btn-custom-disabled{% endif %}">
+                    <i class="bi bi-pause-fill"></i>
+                  </a>
+                </td>
                 
                 {% if dev.status == 'running' %}
                 <td class="text-center">
@@ -74,7 +81,21 @@
 </script>
 
 <style>
-  /* Add your CSS styles if needed */
+  .btn-custom-disabled {
+    background-color: #d3d3d3; /* Cinza claro */
+    border-color: #d3d3d3; /* Cinza claro */
+    color: #a9a9a9; /* Cinza escuro para o texto */
+    cursor: not-allowed;
+  }
+
+  .btn-custom-disabled i {
+    color: #a9a9a9; /* Cinza escuro para o ícone */
+  }
+
+  .btn-custom-disabled:hover {
+    background-color: #d3d3d3; /* Mantém a cor cinza claro ao passar o mouse */
+    border-color: #d3d3d3; /* Mantém a cor cinza claro ao passar o mouse */
+  }
 </style>
 
 {% endblock %}

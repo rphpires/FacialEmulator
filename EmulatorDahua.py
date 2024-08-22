@@ -332,9 +332,12 @@ class DahuaEmulator(threading.Thread):
         self.app = FastAPI()
         
         base_url = f'/cgi-bin/getUser.cgi'
-        self.remote_server = '127.0.0.1'
-        self.remote_port = 5500 + 10002
+
+        self.remote_server = self.dahua.get_settings("RemoteServer") 
+        self.remote_port = self.dahua.get_settings("RemotePort") 
         self.remote_server_url = f'http://{self.remote_server}:{self.remote_port}'
+        trace(f'Starting server URL from database: {self.remote_server_url}')
+
         self.mac_address = generate_mac_address()
         trace(f'Settings Mac-Adress= {self.mac_address}')
 
@@ -418,11 +421,14 @@ table.Network.eth0.SubnetMask=255.255.248.0
                     case "setConfig":
                         trace(f'SetConfig: {request.query_params}')
                         self.remote_server = request.query_params["PictureHttpUpload.UploadServerList[0].Address"]
+                        self.dahua.set_settings("RemoteServer", self.remote_server)
+
                         self.remote_port = request.query_params["PictureHttpUpload.UploadServerList[0].Port"]
+                        self.dahua.set_settings("RemotePort", self.remote_port)
+
                         self.remote_server_url = f'http://{self.remote_server}:{self.remote_port}'
-
+                        
                         trace(f'Set LocalAuthentication: PictureHttpUpload.Enable= {request.query_params["PictureHttpUpload.Enable"]}')
-
                         local_authentication_value = "0" if request.query_params["PictureHttpUpload.Enable"] == "True" else "1" ## Set LocalAuthentication
                         ## IF "PictureHttpUpload.Enable" == True => Online Authentication
                         self.dahua.set_settings("LocalAuthentication", local_authentication_value)
@@ -683,6 +689,8 @@ table.Network.eth0.SubnetMask=255.255.248.0
 
     def scheduler(self):
         schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
+        schedule.every(5).minutes.do(still_running_trace)
+
         while True:
             schedule.run_pending()   
             time.sleep(1)
@@ -698,6 +706,8 @@ table.Network.eth0.SubnetMask=255.255.248.0
         cwd = pathlib.Path(__file__).parent.resolve()
         uvicorn.run(self.app, host=self.ip, port=self.port, log_config=f"{cwd}/.log.ini")
         
+def still_running_trace():
+    trace('Emulator is still running')
 
 if __name__ == "__main__":
     port=77

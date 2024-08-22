@@ -282,7 +282,9 @@ ON [HikvisionFinger]([CHID] ASC, [DataIndex] ASC);
 
 ----------------------------  INSERTING DEFAULT SETTINGS ----------------------------
 
-INSERT INTO DeviceSettings VALUES ('LocalAuthentication', '1')
+INSERT INTO DeviceSettings VALUES ('LocalAuthentication', '1');
+INSERT INTO DeviceSettings VALUES ('RemoteServer', '127.0.0.1');
+INSERT INTO DeviceSettings VALUES ('RemotePort', 15502);
 """ 
 
 SERVICE_DB_CREATION_STRING = """
