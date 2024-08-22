@@ -293,31 +293,37 @@ Content-Disposition: form-data; name="file"\r
         except Exception as ex:
             report_exception(ex)
             return None, None
+        
 
     def get_door_event(self, status, mac_address):
-        current_datetime = datetime.utcnow()
-        online_event_boundary = """\r
+        try:
+            current_datetime = datetime.utcnow()
+            online_event_boundary = """\r
 --myboundary\r
 Content-Type: text/plain\r
 Content-Disposition: form-data; name="info"\r
 \r
 """
-        door_event = {
-            "Events" : [
-                {
-                    "Action" : "Pulse",
-                    "Code" : "DoorStatus",
-                    "Data" : {
-                        "Status" : status,
-                        "UTC" : int(time.time())
-                    },
-                    "Index" : 0,
-                    "PhysicalAddress" : mac_address
-                }
-            ],
-            "Time" : current_datetime.strftime("%d-%m-%Y %H:%M:%S")
-        }
-        return f'''{online_event_boundary + json.dumps(door_event, indent=2)}\r\n--myboundary--\r\n\r\n''' 
+            door_event = {
+                "Events" : [
+                    {
+                        "Action" : "Pulse",
+                        "Code" : "DoorStatus",
+                        "Data" : {
+                            "Status" : status,
+                            "UTC" : int(time.time())
+                        },
+                        "Index" : 0,
+                        "PhysicalAddress" : mac_address
+                    }
+                ],
+                "Time" : current_datetime.strftime("%d-%m-%Y %H:%M:%S")
+            }
+            return f'''{online_event_boundary + json.dumps(door_event, indent=2)}\r\n--myboundary--\r\n\r\n''' 
+        
+        except Exception as ex:
+            report_exception(ex)
+            
 
 class DahuaEmulator(threading.Thread):
     def __init__(self, ip, port, db_handler, event_freq) -> None:
@@ -347,12 +353,18 @@ class DahuaEmulator(threading.Thread):
 
         @staticmethod 
         def handle_response(content, response_code = 200, latency_sleep=50):
-            response = Response(content=content, status_code=response_code)
-            response.headers["Content-Type"] = "text/plain; charset=utf-8"
-            # trace('---- Start sleep ----')
-            time.sleep(latency_sleep / 1000)
-            # trace('---- End sleep ----')
-            return response
+            try:
+                response = Response(content=content, status_code=response_code)
+                response.headers["Content-Type"] = "text/plain; charset=utf-8"
+                # trace('---- Start sleep ----')
+                time.sleep(latency_sleep / 1000)
+                # trace('---- End sleep ----')
+                return response
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content='Emulator Error', status_code=response_code)
+
 
         ## Custom endpoint to check emulator status
         @self.app.get('/emulator/get-status')
@@ -363,7 +375,7 @@ class DahuaEmulator(threading.Thread):
                 return {"CurrentDatetime": current_time}
 
             except Exception as ex:
-                report_exception()
+                report_exception(ex)
             
         ### -------------------------------  Global -----------------------------
         @self.app.get('/cgi-bin/global.cgi')
@@ -382,7 +394,7 @@ class DahuaEmulator(threading.Thread):
                         return handle_response("OK") 
             
             except Exception as ex:
-                print(ex)
+                report_exception(ex)
 
 
         ### -------------------------------  MagicBox -----------------------------
@@ -612,40 +624,64 @@ table.Network.eth0.SubnetMask=255.255.248.0
                 super().__init__(self.iter_content(), media_type="text/event-stream")
 
             async def iter_content(self):
-                async for chunk in self.agen:
-                    yield chunk
+                try:
+                    async for chunk in self.agen:
+                        yield chunk
+
+                except Exception as ex:
+                        report_exception(ex)
+
 
         @self.app.get("/cgi-bin/snapManager.cgi")
         async def heartbeat(request: Request):
-            trace("[GET] /cgi-bin/snapManager.cgi")
-            return AsyncGeneratorResponse(self.generate_heartbeat())
+            try:
+                trace("[GET] /cgi-bin/snapManager.cgi")
+                return AsyncGeneratorResponse(self.generate_heartbeat())
+
+            except Exception as ex:
+                        report_exception(ex)
+
 
     async def generate_heartbeat(self):
         heartbeat_counter = time.time()
         self.genereted_event_counter = time.time()
 
         while True:
-            trace(f'## StandAlone heartbeat and event')
-            now = time.time()
-            if self.generated_event and (now - self.genereted_event_counter >= self.generated_event_frequency):
-                trace(f'>> Sending Generated Fake Event <<')
-                self.genereted_event_counter= time.time()
-                evt_package = self.dahua.generate_random_event()
+            try:
+                trace(f'## StandAlone heartbeat and event')
+                now = time.time()
+                if self.generated_event and (now - self.genereted_event_counter >= self.generated_event_frequency):
+                    trace(f'>> Sending Generated Fake Event <<')
+                    try:
+                        self.genereted_event_counter= time.time()
+                        evt_package = self.dahua.generate_random_event()
 
-                if evt_package and self.dahua.get_settings("LocalAuthentication") == '1':
-                    trace('## yield event')
-                    yield evt_package
+                        if evt_package and self.dahua.get_settings("LocalAuthentication") == '1':
+                            trace('## yield event')
+                            yield evt_package
+                    
+                    except Exception as ex:
+                        report_exception(ex)
 
-            if now - heartbeat_counter >= 10:
-                trace('>> Sending Heartbeat <<')
-                heartbeat_counter = now
-                yield b'\r\n\r\n\r\n--myboundary\r\nContent-Type: text/plain\r\nContent-Length:9\r\n\r\nHeartbeat'
-            
-            if self.dahua.get_settings("LocalAuthentication") == '0':
-                break
+                if now - heartbeat_counter >= 10:
+                    trace('>> Sending Heartbeat <<')
+                    try:
+                        heartbeat_counter = now
+                        yield b'\r\n\r\n\r\n--myboundary\r\nContent-Type: text/plain\r\nContent-Length:9\r\n\r\nHeartbeat'
+                    
+                    except Exception as ex:
+                        report_exception(ex)
 
-            await asyncio.sleep(2)
-    
+
+                if self.dahua.get_settings("LocalAuthentication") == '0':
+                    break
+
+                await asyncio.sleep(2)
+
+            except Exception as ex:
+                report_exception(ex)
+
+
     ### ------------------------------------------------------------------
     ### ------------------------ Online events ---------------------------
     ### ------------------------------------------------------------------
@@ -683,29 +719,41 @@ table.Network.eth0.SubnetMask=255.255.248.0
             except Exception as ex:
                 report_exception(ex)
 
-    #def schedule_task(self):
-    #    self.scheduler.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
+
 
     def scheduler(self):
         schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
         schedule.every(5).minutes.do(still_running_trace)
 
         while True:
-            schedule.run_pending()   
-            time.sleep(1)
+            try:
+                schedule.run_pending()   
+                time.sleep(1)
+            except Exception as ex:
+                report_exception(ex)
+
 
     ### ------------------------------------------------------------------
     ### ------------------------ Online events ---------------------------
     ### ------------------------------------------------------------------
     
     def run(self):
-        threading.Thread(target=self.scheduler).start()
-        ## WebServer innitialization...
-        trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-        uvicorn.run(self.app, host=self.ip, port=self.port)
+        try:
+            threading.Thread(target=self.scheduler).start()
+        except Exception as ex:
+            report_exception(ex)
+
+        try:
+            ## WebServer innitialization...
+            trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
+            uvicorn.run(self.app, host=self.ip, port=self.port)
+        except Exception as ex:
+            report_exception(ex)
+
         
 def still_running_trace():
     trace('Emulator is still running')
+
 
 if __name__ == "__main__":
     port=77
