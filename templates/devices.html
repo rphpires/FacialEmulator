@@ -3,55 +3,71 @@
 {% block content %}
 
 <div class="container mt-4">
-    <h3 class="display-8">Dispositivos</h3>
+  <div class="row align-items-center">
+    <!-- Título alinhado à esquerda -->
+    <div class="col-md-6">
+      <h3 class="display-8">Dispositivos</h3>
+    </div>
+    <!-- Botões alinhados à direita -->
+    <div class="col-md-6 text-end">
+      <button class="btn btn-outline-success ms-2" onclick="Start_emulators()">
+        <i class="bi bi-play-fill"></i> Iniciar
+      </button>
+      <button class="btn btn-outline-danger ms-2" onclick="stop_emulators()">
+        <i class="bi bi-stop-fill"></i> Parar
+      </button>
+    </div>
+  </div>
 
-    <table class="table table-striped table-hover" id="device-table">
-        <thead>
+
+
+  <table class="table table-striped table-hover" id="device-table">
+      <thead>
+          <tr>
+            <th scope="col" class="text-center">LocalControllerID</th>
+            <th scope="col" class="text-center">Nome</th>
+            <th scope="col" class="text-center">Port</th>
+            <th scope="col" class="text-center">Event Interval (s)</th>
+            <th scope="col" class="text-center">Commands</th>
+            <th scope="col" class="text-center">
+              <input type="checkbox" id="select-all" />
+            </th>
+            <th scope="col" class="text-center">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dev in devices %}
             <tr>
-              <th scope="col" class="text-center">
-                <input type="checkbox" id="select-all" />
-              </th>
-              <th scope="col" class="text-center">LocalControllerID</th>
-              <th scope="col" class="text-center">Nome</th>
-              <th scope="col" class="text-center">Port</th>
-              <th scope="col" class="text-center">Event Interval (s)</th>
-              <th scope="col" class="text-center">Commands</th>
-              <th scope="col" class="text-center">Status</th>
+              <td class="text-center">{{ dev.lc_id }}</td>
+              <td class="text-center">{{ dev.name }}</td>
+              <td class="text-center">{{ dev.port }}</td>
+              <td class="text-center">{{ dev.interval }}</td>
+              <td class="text-center">
+                <a href="#" class="btn btn-outline-success btn-sm {% if dev.status == 'running' %}btn-custom-disabled{% endif %}">
+                  <i class="bi bi-play-fill"></i>
+                </a>
+                <a href="#" class="btn btn-outline-danger btn-sm {% if dev.status == 'stopped' %}btn-custom-disabled{% endif %}">
+                  <i class="bi bi-pause-fill"></i>
+                </a>
+              </td>
+              <td class="text-center">
+                <input type="checkbox" class="device-checkbox" />
+              </td>
+              
+              {% if dev.status == 'running' %}
+              <td class="text-center">
+                <span class="border border-success" style="padding: 5px; border-radius: 5px; color: #117529;">{{ dev.status }}</span>
+              </td>
+              {% else %}
+              <td class="text-center">
+                <span class="border border-danger" style="padding: 5px; border-radius: 5px; color: #a70000;">{{ dev.status }}</span>
+              </td>
+              {% endif %}
+              
             </tr>
-          </thead>
-          <tbody>
-            {% for dev in devices %}
-              <tr>
-                <td class="text-center">
-                  <input type="checkbox" class="device-checkbox" />
-                </td>
-                <td class="text-center">{{ dev.lc_id }}</td>
-                <td class="text-center">{{ dev.name }}</td>
-                <td class="text-center">{{ dev.port }}</td>
-                <td class="text-center">{{ dev.interval }}</td>
-                <td class="text-center">
-                  <a href="#" class="btn btn-outline-success btn-sm {% if dev.status == 'running' %}btn-custom-disabled{% endif %}">
-                    <i class="bi bi-play-fill"></i>
-                  </a>
-                  <a href="#" class="btn btn-outline-danger btn-sm {% if dev.status == 'stopped' %}btn-custom-disabled{% endif %}">
-                    <i class="bi bi-pause-fill"></i>
-                  </a>
-                </td>
-                
-                {% if dev.status == 'running' %}
-                <td class="text-center">
-                  <span class="border border-success" style="padding: 5px; border-radius: 5px; color: #117529;">{{ dev.status }}</span>
-                </td>
-                {% else %}
-                <td class="text-center">
-                  <span class="border border-danger" style="padding: 5px; border-radius: 5px; color: #a70000;">{{ dev.status }}</span>
-                </td>
-                {% endif %}
-                
-              </tr>
-            {% endfor %}
-          </tbody>
-    </table>
+          {% endfor %}
+        </tbody>
+  </table>
 
 </div>
 
