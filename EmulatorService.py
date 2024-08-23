@@ -476,7 +476,7 @@ class Service():
             pgrep_cmd = f"ps aux | grep 'facial_emulator_{device_port}' | grep -v grep | awk '{{print $2}}'"
             result = subprocess.run(pgrep_cmd, shell=True, check=True, stdout=subprocess.PIPE, text=True)
             _r = result.stdout.strip().split('\n')
-            trace(f"get_pids_of_running_process.port = {device_port} | return: {_r}")
+            trace(f"get_pids_of_running_process.port = {device_port} | return: {_r}.")
             return _r
         
         except Exception as ex:
