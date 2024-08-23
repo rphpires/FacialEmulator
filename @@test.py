@@ -1,27 +1,36 @@
-from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-import logging
-from datetime import datetime
-import time
-from Tracer import *
+import requests
 
 
+# get_status = requests.get(f'http://172.20.112.122:1050/emulator/get-status', timeout=2)
+# print(get_status.status_code)
 
-app = FastAPI()
 
-# ... (sua configuração do FastAPI)
+import subprocess
 
-# Seu método personalizado de log
-def custom_log(message):
-    with open('meu_log.log', 'a') as f:
-        f.write(f"{datetime.now()} - {message}\n")
+def kill_processes_by_command(command):
+    try:
+        # Executa o comando pgrep para obter os PIDs dos processos
+        pgrep_cmd = f"pgrep -f '{command}'"
+        cmd = f"ps aux | grep '{command}' | grep -v grep | awk '{{print $2}}'"
 
-# Interceptor
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    log_message = f"method={request.method}, url={request.url}, status_code={response.status_code}, process_time={process_time:.4f}s"
-    custom_log(log_message)
-    return response
+        result = subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, text=True)
+
+        # Captura a saída (os PIDs)
+        pids = result.stdout.strip().split('\n')
+
+        if pids:
+            print(f"Processos encontrados: {pids}")
+            for pid in pids:
+                print(pid)
+                # Finaliza cada processo encontrado
+                #kill_cmd = f"kill -9 {pid}"
+                #subprocess.run(kill_cmd, shell=True, check=True)
+                #print(f"Processo {pid} finalizado.")
+        else:
+            print("Nenhum processo encontrado.")
+
+    except subprocess.CalledProcessError:
+        print("Nenhum processo encontrado ou erro ao executar o comando.")
+
+if __name__ == "__main__":
+    kill_processes_by_command("facial_emulator_1050")

@@ -27,7 +27,7 @@ class DatabaseReader:
             f"DATABASE={self.database};"
             f"UID={self.username};"
             f"PWD={self.password};"
-            "TrustServerCertificate=yes"
+            "Encrypt=no;"
         )
         # print(f'ConnString: {connection_string}')
         return pyodbc.connect(connection_string)

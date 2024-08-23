@@ -28,8 +28,6 @@ class DahuaCard(BaseModel):
     name: str
     password: str | None = None
 
-## 29 requests.
-
 
 class DahuaHandler():
     def __init__(self, db_handler) -> None:
@@ -37,18 +35,28 @@ class DahuaHandler():
         trace('Starting DahuaHandler class...')
 
     def get_settings(self, cfg_id):
-        ret = self.db_handler.select(f"select value from DeviceSettings where CfgId = '{cfg_id}';")
-        if not ret:
-            return None
+        try:
+            ret = self.db_handler.select(f"select value from DeviceSettings where CfgId = '{cfg_id}';")
+            if not ret:
+                return None
+            
+            value = ret[0][0]
+            trace(f'Value readed from deviceSettings, CfgID={cfg_id} {value= }')
+            return value
         
-        value = ret[0][0]
-        trace(f'Value readed from deviceSettings, CfgID={cfg_id} {value= }')
-        return value
+        except Exception as ex:
+            report_exception(ex)
+            return None
 
     def set_settings(self, cfg_id, value):
-        trace(f"Update Device settings, set {cfg_id} = {value}")
-        self.db_handler.execute(f"UPDATE DeviceSettings SET value = '{value}' WHERE CfgID = '{cfg_id}'")
-
+        try:
+            trace(f"Update Device settings, set {cfg_id} = {value}")
+            self.db_handler.execute(f"UPDATE DeviceSettings SET value = '{value}' WHERE CfgID = '{cfg_id}'")
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def add_card(self, CardName, UserID, CardNo, ValidDateStart, ValidDateEnd):
         try:
             trace(f'Insert Dahua Card: {CardName}, {UserID}, {CardNo}, {ValidDateStart}, {ValidDateEnd}')
@@ -78,59 +86,96 @@ class DahuaHandler():
             report_exception(ex)
 
     def remove_card(self, recno):
-        self.db_handler.execute("DELETE FROM DahuaCard WHERE RecNo = ?", (recno,))
-
+        try:
+            self.db_handler.execute("DELETE FROM DahuaCard WHERE RecNo = ?", (recno,))
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def add_face(self, UserID: int, md5: str = None):
-        self.db_handler.execute("INSERT INTO DahuaFace VALUES (?,?)", (UserID, md5))
-    
+        try:
+            self.db_handler.execute("INSERT INTO DahuaFace VALUES (?,?)", (UserID, md5))
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
+         
     def remove_face(self, user_id):
-        self.db_handler.execute("DELETE FROM DahuaFace WHERE UserId = ?", (user_id,))
-
+        try:
+            self.db_handler.execute("DELETE FROM DahuaFace WHERE UserId = ?", (user_id,))
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def find_remote_faces(self):
-        cnt = self.db_handler.select("SELECT COUNT(*) FROM DahuaFace")[0][0]
-        return {
-            "Token" : randint(1, 30),
-            "Total" : int(cnt)
-        }
-    
+        try:
+            cnt = self.db_handler.select("SELECT COUNT(*) FROM DahuaFace")[0][0]
+            return {
+                "Token" : randint(1, 30),
+                "Total" : int(cnt)
+            }
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def get_remote_faces(self, count, offset):
-        info = {"Info" : []}
-        scp = self.db_handler.select(f"SELECT * FROM DahuaFace LIMIT ? OFFSET ?", (count, offset))
-        if not scp:
+        try:
+            info = {"Info" : []}
+            scp = self.db_handler.select(f"SELECT * FROM DahuaFace LIMIT ? OFFSET ?", (count, offset))
+            if not scp:
+                return info
+            
+            info["Info"] = [ {"MD5": y, "UserID": x} for x,y in scp ]
             return info
         
-        info["Info"] = [ {"MD5": y, "UserID": x} for x,y in scp ]
-        return info
+        except Exception as ex:
+            report_exception(ex)
+            return None
 
-      
     def find_card(self, user_id):
-        scp = self.db_handler.select("SELECT * FROM DahuaCard WHERE UserId = ?", (user_id, ))
-        if not scp:
-            return "found=0"
-        else:
-            return f"found=1\n{self.format_card_to_response(scp)}"
+        try:
+            scp = self.db_handler.select("SELECT * FROM DahuaCard WHERE UserId = ?", (user_id, ))
+            if not scp:
+                return "found=0"
+            else:
+                return f"found=1\n{self.format_card_to_response(scp)}"
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
     
     def get_remote_cards(self, count, offset):
-        scp = self.db_handler.select(f"SELECT * FROM DahuaCard LIMIT ? OFFSET ?", (count, offset))
-        if not scp:
-            return "found=0"
+        try:
+            scp = self.db_handler.select(f"SELECT * FROM DahuaCard LIMIT ? OFFSET ?", (count, offset))
+            if not scp:
+                return "found=0"
+            
+            return f"found={len(scp)}\n{self.format_card_to_response(scp)}" 
+
+        except Exception as ex:
+            report_exception(ex)
+            return None
         
-        return f"found={len(scp)}\n{self.format_card_to_response(scp)}" 
-
-
     def check_if_card_exists(self, cardNo, userId):
-        scp = self.db_handler.select("SELECT * FROM DahuaCard WHERE CardNo = ? OR UserId = ?", (cardNo, userId))
-        if not scp:
-            return True
-        error(f'Dahua Card: {userId = } or {cardNo = } already exists in database')
-        return False
-    
+        try:
+            scp = self.db_handler.select("SELECT * FROM DahuaCard WHERE CardNo = ? OR UserId = ?", (cardNo, userId))
+            if not scp:
+                return True
+            error(f'Dahua Card: {userId = } or {cardNo = } already exists in database')
+            return False
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def format_card_to_response(self, cards):
-        i = 0
-        record = ""
-        for card in cards:
-            RecNo, CardName, UserID, CardNo, ValidDateStart, ValidDateEnd = card
-            rec = f"""records[{i}].CardName={CardName}
+        try:
+            i = 0
+            record = ""
+            for card in cards:
+                RecNo, CardName, UserID, CardNo, ValidDateStart, ValidDateEnd = card
+                rec = f"""records[{i}].CardName={CardName}
 records[{i}].CardNo={CardNo}
 records[{i}].CardStatus=0
 records[{i}].CardType=0
@@ -151,20 +196,30 @@ records[{i}].VTOPosition=
 records[{i}].ValidDateEnd={ValidDateEnd}
 records[{i}].ValidDateStart={ValidDateStart}
 """
-            record = record + rec
-            i += 1
+                record = record + rec
+                i += 1
 
-        return record
-
+            return record
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def generate_random_event(self):
         trace('generate_local_event')
-        evt = self.db_handler.select("SELECT CardName, CardNo FROM DahuaCard ORDER BY RANDOM() LIMIT 1;")
-        if not evt:
-            return False
+        try:
+            evt = self.db_handler.select("SELECT CardName, CardNo FROM DahuaCard ORDER BY RANDOM() LIMIT 1;")
+            if not evt:
+                return False
         
-        (CardName, CardNo) = evt[0]
+        except Exception as ex:
+            report_exception(ex)
+            return None
 
-        gen_evt = f"""Events[0].Alive=100\r
+        try:    
+            (CardName, CardNo) = evt[0]
+
+            gen_evt = f"""Events[0].Alive=100\r
 Events[0].CardName={CardName}\r
 Events[0].CardNo={CardNo}\r
 Events[0].CardType=0\r
@@ -201,7 +256,7 @@ Events[0].UTC=1711203293\r
 Events[0].UserID=29559\r
 Events[0].UserType=0\r
 """
-        evt_package = f"""\r
+            evt_package = f"""\r
 \r
 \r
 --myboundary\r
@@ -209,12 +264,16 @@ Content-Type: text/plain\r
 Content-Length: {len(gen_evt)}\r
 \r
 """ 
-        evt_package += gen_evt
-        image_content = base64.b64decode(photo_img)
-                
-        data_photo = f"\r\n--myboundary\r\nContent-Type: image/jpeg\r\nContent-Length: {len(image_content)}\r\n\r\n".encode('utf-8')
-        return evt_package.encode('utf-8') + data_photo + image_content
-
+            evt_package += gen_evt
+            image_content = base64.b64decode(photo_img)
+                    
+            data_photo = f"\r\n--myboundary\r\nContent-Type: image/jpeg\r\nContent-Length: {len(image_content)}\r\n\r\n".encode('utf-8')
+            return evt_package.encode('utf-8') + data_photo + image_content
+        
+        except Exception as ex:
+            report_exception(ex)
+            return None
+        
     def generate_online_event(self, mac_address):
         trace(f"generate_online_event: {mac_address = }")
         

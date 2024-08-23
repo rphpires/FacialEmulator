@@ -8,16 +8,16 @@
       <div class="collapse d-sm-block" id="menuCollapse">
         <ul class="nav flex-column align-items-start" id="menu">
           <li>
-            <a href="{{ url_for('start_emulators') }}" class="nav-link px-0 align-middle" style="color: green;">
-              <i class="bi bi-play-circle fs-4"  style="color: green;"></i>
+            <button class="nav-link px-0 align-middle" style="background: none; border: none; color: green; cursor: pointer;" onclick="start_all_emulators()">
+              <i class="bi bi-play-circle fs-4" style="color: green;"></i>
               <span class="ms-1">Iniciar Todos</span>
-            </a>
+            </button>
           </li>
           <li>
-            <a href="{{ url_for('stop_emulators') }}" class="nav-link px-0 align-middle" style="color: rgb(245, 70, 70);">
+            <button class="nav-link px-0 align-middle" style="background: none; border: none; color: rgb(245, 70, 70); cursor: pointer;" onclick="stop_all_emulators()">
               <i class="bi bi-stop-circle fs-4" style="color: rgb(245, 70, 70);"></i>
               <span class="ms-1">Parar Todos</span>
-            </a>
+            </button>
           </li>
           <li>
             <a href="{{ url_for('refresh_emulators') }}" class="nav-link px-0 align-middle">
@@ -34,3 +34,36 @@
       <hr>
     </div>
   </div>
+
+
+  <script>
+    window.start_all_emulators = async () => {
+      try {
+        const response = await fetch('/start', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ devices: ["all"] }),  // Ajuste conforme necessário
+        });
+      } catch (error) {
+        console.error('Erro ao iniciar emuladores:', error);
+        alert('Erro ao iniciar emuladores.');
+      }
+    };
+    window.stop_all_emulators = async () => {
+      try {
+        const response = await fetch('/stop', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ devices: ["all"] }),  // Ajuste conforme necessário
+        });
+      } catch (error) {
+        console.error('Erro ao parar emuladores:', error);
+        alert('Erro ao parar emuladores.');
+      }
+    };
+
+  </script>

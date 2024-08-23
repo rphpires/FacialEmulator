@@ -5,11 +5,15 @@ import shutil
 import subprocess
 import threading
 import schedule
+import asyncio
+import socketio
 
-from fastapi import FastAPI, Response, Request
+from fastapi import FastAPI, Response, Request, WebSocket
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from fastapi_socketio import SocketManager
 
 from GlobalFunctions import *
 from GlobalConstants import *
@@ -35,45 +39,51 @@ class Service():
 
         ## FastAPI config.
         self.app = FastAPI()
-        # self.app.mount("/static", StaticFiles(directory="static"), name="static")
+        self.sio = socketio.AsyncServer(async_mode='asgi')
+        self.app.mount('/socket.io', socketio.ASGIApp(self.sio))
         self.templates = Jinja2Templates(directory="templates")
 
-   
+
+    
+        self.init_devices()
 
         ## ---------------------------------------
         ## ---------- Interface Methods ----------
         ## ---------------------------------------
+        @self.sio.on('connect')
+        async def connect(sid, _):
+            print('Client connected')
 
-        # class Devices()
+        @self.sio.on('disconnect')
+        async def disconnect(sid):
+            print('Client disconnected')
 
-        @self.app.get("/", response_class=HTMLResponse)
+
+        class Devices(BaseModel):
+            devices: list[str]
+
+        @self.app.api_route("/", methods=["GET", "POST"], response_class=HTMLResponse)
         async def main_page(request: Request):
             context = {"request": request, "devices": self.get_current_devices()}
             return self.templates.TemplateResponse('devices.html', context )
        
-
-        @self.app.get("/start", response_class=HTMLResponse)
-        async def start_emulators(request: Request):
+        @self.app.post("/start", response_class=HTMLResponse)
+        async def start_emulators(request: Request, devices: Devices):
             print('>>> Starting Emulators')
-            self.start_emulators()
+            self.start_emulators(devices.devices)
             return RedirectResponse(url="/")
 
-        
-        @self.app.get("/stop", response_class=HTMLResponse)
-        async def stop_emulators(request: Request):
+        @self.app.post("/stop", response_class=HTMLResponse)
+        async def stop_emulators(request: Request, devices: Devices):
             print('>>> Stoping Emulators')
-            self.stop_emulators()
+            self.stop_emulators(devices.devices)
             return RedirectResponse(url="/")
             
-
         @self.app.get("/refresh", response_class=HTMLResponse)
         async def refresh_emulators(request: Request):
             print('>>> Refreshing database')
             self.refresh_configured_devices()
             return RedirectResponse(url="/")
-            return self.templates.TemplateResponse(
-                request=request, name='devices.html'
-            )
 
         @self.app.get("/recreate", response_class=HTMLResponse)
         async def recreate_emulators(request: Request):
@@ -81,8 +91,7 @@ class Service():
             self.recreate_emulator_files()
             print('>>> Recreating emulator executable: END')
             return RedirectResponse(url="/?recreate=true")
-
-
+        
         ## ---------------------------------
         ## ---------- API Methods ----------
         ## ---------------------------------
@@ -92,7 +101,6 @@ class Service():
             response.headers["Content-Type"] = "text/plain; charset=utf-8"
             return response          
         
-
         @self.app.get('/api/emulators/start')
         async def api_start_emulators():
             print('>>> Starting Emulators')
@@ -111,11 +119,17 @@ class Service():
             self.refresh_configured_devices()
             return {"response": "Stop Emulators command: OK"}
 
-
-
     ## -------------------------------------
     ## ---------- Class Functions ----------
     ## -------------------------------------
+
+
+    def init_devices(self):
+        self.devices_watchdog = {}
+        for device in self.get_current_devices():
+            self.devices_watchdog[device["port"]] = 0
+            self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {device['lc_id']};")
+
 
     def get_current_devices(self):
         current_devices = []
@@ -132,10 +146,9 @@ class Service():
                     "enabled": enabled,
                     "interval": interval
                 })
-
+                
         return current_devices
     
-
     def get_missing_keys(self, local_devices, wxs_controllers_dit):
         # Obter as chaves de ambos os dicionários
         local_keys = set(local_devices.keys())
@@ -148,7 +161,6 @@ class Service():
         return list(missing_keys)
 
     def refresh_configured_devices(self):
-        current_controllers = []
         wxs_controllers_dit = {}
 
         result = sql.read_data(f"""
@@ -190,6 +202,7 @@ class Service():
                 'model': 'Hikvision' if type in HIKVISION_CONTROLLER_TYPES else 'Dahua' if type in DAHUA_CONTROLLER_TYPES else ' - '
             }
 
+
         get_local_lcs = "SELECT LocalControllerID, Name, IPAddress, Port, Model, Enabled, Type, EventInterval FROM Main;"
         local_devices = {}
 
@@ -224,7 +237,7 @@ class Service():
             self.service_db.execute(f'delete from Main where LocalControllerID= {id};')
 
         print(wxs_controllers_dit)
-
+        self.init_devices()
 
 
     def check_emulator_path(self, port):
@@ -275,12 +288,21 @@ class Service():
             except Exception as ex:
                 report_exception(ex)
 
-    def start_emulators(self, innit_ports = None):
-        trace('Starting emulators process')
-        processes = []
-        script = "select IPAddress, Port, Model, Enabled, EventInterval from Main where Enabled = 1"
-        script += f" and Port in ({','.join(str(p) for p in innit_ports)});" if innit_ports else ";"
+    def start_emulators(self, devices = None): ## TODO: verificar se o processo já está em execução, se estiver não iniciar 
+        trace(f'Starting emulators process: {devices}')
+        try:
+            processes = []
+            script = "select IPAddress, Port, Model, Enabled, EventInterval from Main where Enabled = 1"
+            if 'all' in devices:
+                script += ";"
+            else:
+                script += f" and Port in ({','.join(str(p) for p in devices)});"
+
+            trace(script)
         
+        except Exception as ex:
+            report_exception(ex)
+
         read_lc_contents = self.service_db.select(script)
         for ip, port, model, enabled, evt_interval in read_lc_contents:
             try:
@@ -290,15 +312,18 @@ class Service():
                 try:
                     if executavel:
                         args = [emulator_path, str(ip), str(port), model, str(evt_interval)]
-                        trace(f'## ARGS: {args}')
-                        process = subprocess.Popen(
-                            args, 
-                            cwd= emulator_folder, # Define o diretório de trabalho do processo.
-                            stdout=subprocess.PIPE, 
-                            stderr=subprocess.PIPE, 
-                            text=True
-                        )
-                        processes.append((process, port))
+                        if self.get_pids_of_running_process(port) == ['']:
+                            trace(f'## ARGS: {args}')
+                            process = subprocess.Popen(
+                                args, 
+                                cwd= emulator_folder, # Define o diretório de trabalho do processo.
+                                stdout=subprocess.PIPE, 
+                                stderr=subprocess.PIPE, 
+                                text=True
+                            )
+                            processes.append((process, port))
+                        else:
+                            trace(f'Port: {port}, process is already running.')
 
                 except Exception as ex:
                     report_exception(ex)
@@ -310,20 +335,22 @@ class Service():
         # trace('Starting processes end.')
 
 
-    def stop_emulators(self):
+    def stop_emulators(self, devices):
         for root, dirs, files in os.walk('running'):
             try:
+                # print(dirs)
                 for file in files:
                     try:
                         # Verifica se o arquivo é chamado "PID" (sem extensão)
                         if file == "PID":
-                            file_path = os.path.join(root, file)
-                            try:
-                                os.remove(file_path)
-                                print(f"Deleted: {file_path}")
-                            except Exception as e:
-                                print(f"Error deleting {file_path}: {e}")
-                    
+                            if 'all' in devices or root.split('/')[1] in devices:
+                                file_path = os.path.join(root, file)
+                                try:
+                                    os.remove(file_path)
+                                    print(f"Deleted: {file_path}")
+                                except Exception as e:
+                                    print(f"Error deleting {file_path}: {e}")
+
                     except Exception as ex:
                         report_exception(ex)
 
@@ -401,34 +428,132 @@ class Service():
         except Exception as e:
             print(f"Erro ao excluir arquivos: {e}")
 
-    # -- Erro ao excluir arquivos: [WinError 5] Access is denied: 'running\\1080\\TraceEmulator'
-
     def stop(self):
         self.service_db.disconnect()
         self.service_db.join()
 
+    def check_connection(self, device):
+        try:
+            get_conn = requests.get(f'http://{device["ip_address"]}:{device["port"]}/emulator/get-status', timeout=2)  
+            if get_conn.status_code in [200]: 
+                return True
+            else:
+                print(f'Failed or offline: {device["ip_address"]}:{device["port"]} = {get_conn.status_code}')
+                return False      
+            
+        except requests.exceptions.RequestException:
+            print(f'Failed or offline: {device["ip_address"]}:{device["port"]} | Current Status= {device["status"]}')
+            return False
 
-    def refresh_device_status(self): #TODO: Implement function
+    async def update_device_status(self, device_id: int, status: str):
+        trace(f'------ Gerando update para o controlador: {device_id}')
+        await self.sio.emit('update_device_status', {'device_id': device_id, 'updated_html': self.format_device_template(device_id) })
+
+    async def refresh_device_status(self):
         for dev in self.get_current_devices():
             try:
-                get_status = requests.get(f'http://{dev["ip_address"]}:{dev["port"]}/emulator/get-status', timeout=2)
-                if get_status.status_code in [200]:
-                    print(f'****** {dev["ip_address"]}:{dev["port"]} = OK | Current Status= {dev["status"]}')
+                if self.check_connection(dev):
+                    print(f'>> {dev["ip_address"]}:{dev["port"]} = OK | Current Status= {dev["status"]}')
+                    self.devices_watchdog[dev['port']] = 0
                     if dev["status"] != "running":
                         self.service_db.execute(f"update Main set status = 'running' where LocalControllerID = {dev['lc_id']};")
+                        await self.update_device_status(dev["lc_id"], 'running')
+                    continue
                 else:
-                    print(f'Failed or offline: {dev["ip_address"]}:{dev["port"]} = {get_status.status_code}')
+                    self.emulator_watchdog(dev)
                     if dev["status"] != "stopped":
                         self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {dev['lc_id']};")
+                        await self.update_device_status(dev["lc_id"], 'running')
 
             except requests.exceptions.RequestException  as ex:
-                print(f'Failed or offline: {dev["ip_address"]}:{dev["port"]} | Current Status= {dev["status"]}')
+                self.emulator_watchdog(dev)
                 if dev["status"] != "stopped":
                     self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {dev['lc_id']};")
+                    await self.update_device_status(dev["lc_id"], 'running')
 
+    def get_pids_of_running_process(self, device_port):
+        try:
+            pgrep_cmd = f"ps aux | grep 'facial_emulator_{device_port}' | grep -v grep | awk '{{print $2}}'"
+            result = subprocess.run(pgrep_cmd, shell=True, check=True, stdout=subprocess.PIPE, text=True)
+            _r = result.stdout.strip().split('\n')
+            trace(f"get_pids_of_running_process.port = {device_port} | return: {_r}")
+            return _r
+        
+        except Exception as ex:
+            report_exception(ex)
+            return ['']
+
+    def emulator_watchdog(self, device):
+        try:
+            print(f'--- counter = {self.devices_watchdog[device["port"]]}')
+            if (pids := self.get_pids_of_running_process(device["port"])) != [""]:
+                print(f'--- PORT= {device["port"]} | PIDS: {pids}')
+                if self.devices_watchdog[device['port']] > 3:
+                    error(f'Emulator Port= {device["port"]} is not running correctly... killing process.')
+                    for pid in pids:
+                        try:
+                            kill_cmd = f"kill -9 {pid}"
+                            subprocess.run(kill_cmd, shell=True, check=True)
+                            trace(f"Processo {pid} finalizado.")
+                        except:
+                            error(f'error killing process: {pid}')
+
+                    threading.Thread(target=self.start_emulator_with_delay, args=(device['port'],)).start()
+                    self.devices_watchdog[device['port']] = 0
+                else:
+                    self.devices_watchdog[device['port']] += 1
+
+            else:
+                self.devices_watchdog[device['port']] = 0
+        
+        except Exception as ex:
+            report_exception(ex)
+
+    def format_device_template(self, device_id):
+        try:
+            result = self.service_db.select(f"select Name, Port, EventInterval, Status from Main where LocalControllerID = {device_id};")
+            trace(f"format_device_template: {result}")
+            name, port, interval, status = result[0]
+        except Exception as ex:
+            report_exception(ex)
+
+        _template = device_template.replace("$lc_id", str(device_id))
+        _template = _template.replace("$name", str(name))
+        _template = _template.replace("$port", str(port))
+        _template = _template.replace("$interval", str(interval))
+
+        if status == 'running':
+            button_start = 'btn-custom-disabled'
+            button_stop = ""
+            status_obj = f"""
+                <td class="text-center">
+                    <span class="border border-success" style="padding: 5px; border-radius: 5px; color: #117529;">{status}</span>
+                </td>"""
+        else:
+            button_start = ""
+            button_stop = "btn-custom-disabled"
+            status_obj = f"""
+                <td class="text-center">
+                    <span class="border border-danger" style="padding: 5px; border-radius: 5px; color: #a70000;">{status}</span>
+                </td>"""
+
+        _template = _template.replace('$buttonStart', button_start)
+        _template = _template.replace('$buttonStop', button_stop)
+        _template = _template.replace('$statusObj', status_obj)
+
+        return _template
+
+
+
+    def start_emulator_with_delay(self, device_port):
+        time.sleep(3)
+        self.start_emulators([device_port])
+
+    def refresh_device_status_wrapper(self):
+        asyncio.run(self.refresh_device_status())
 
     def scheduler(self):
-        schedule.every(10).seconds.do(self.refresh_device_status)
+        schedule.every(10).seconds.do(self.refresh_device_status_wrapper)
         while True:
             schedule.run_pending()   
             time.sleep(1)
@@ -444,11 +569,30 @@ class Service():
         uvicorn.run(self.app, host=self.ip, port=self.port)
 
     
-
-
-__os = check_os()
-print(__os)
-
+device_template = """
+<tr id="device_$lc_id">
+<td class="text-center">$lc_id</td>
+<td class="text-center">$name</td>
+<td class="text-center" id="port_no">$port</td>
+<td class="text-center">$interval</td>
+<td class="text-center">
+<a href="#" 
+    class="btn btn-outline-success btn-sm $buttonStart"
+    onclick="startSingleEmulator('$port')">
+    <i class="bi bi-play-fill"></i>
+</a>
+<a href="#" 
+    class="btn btn-outline-danger btn-sm $buttonStop"
+    onclick="stopSingleEmulator('$port')">
+    <i class="bi bi-pause-fill"></i>
+</a>
+</td>
+<td class="text-center">
+<input type="checkbox" class="device-checkbox" />
+</td>
+$statusObj
+</tr>
+"""
 if __name__ == '__main__':
     serv = Service()
     serv.refresh_configured_devices()
