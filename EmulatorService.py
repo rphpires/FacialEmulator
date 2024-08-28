@@ -7,6 +7,7 @@ import threading
 import schedule
 import asyncio
 import socketio
+import os
 
 from fastapi import FastAPI, Response, Request, WebSocket
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
@@ -20,6 +21,8 @@ from GlobalConstants import *
 from DatabaseHandler import DatabaseHandler
 
 import ctypes
+
+load_dotenv()
 
 def is_admin():
     try:
@@ -37,6 +40,11 @@ class Service():
         self.service_db.start()
         self.ip = get_local_ip_address()
         self.port = 8080
+
+        # self.api_server = os.getenv("WXS_API_SERVER")
+        # self.api_user = os.getenv("WXS_API_USER")
+        # self.api_password = os.getenv("WXS_API_PASSWORD")
+        # self.api_url = 
 
         ## FastAPI config.
         self.app = FastAPI()
@@ -64,8 +72,23 @@ class Service():
             devices: list[str]
 
         @self.app.api_route("/", methods=["GET", "POST"], response_class=HTMLResponse)
-        async def main_page(request: Request):
-            context = {"request": request, "devices": self.get_current_devices()}
+        async def main_page(request: Request, page: int = 1, per_page: int = 10):
+            devices = self.get_current_devices()
+            # Paginação
+            total_devices = len(devices)
+            start = (page - 1) * per_page
+            end = start + per_page
+            paginated_devices = devices[start:end]
+
+            total_pages = (total_devices + per_page - 1) // per_page  # Calcula o total de páginas
+
+            context = {
+                "request": request,
+                "devices": paginated_devices,
+                "page": page,
+                "total_pages": total_pages,
+                "per_page": per_page,
+            }
             return self.templates.TemplateResponse('devices.html', context )
        
         @self.app.post("/start", response_class=HTMLResponse)
@@ -134,9 +157,11 @@ class Service():
 
     def get_current_devices(self):
         current_devices = []
-        result = self.service_db.select(f"select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventInterval from Main;")
+        result = self.service_db.select(f"""
+select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventInterval, TotalUsers from Main;
+""")
         if result:
-            for lc_id, name, ip, port, model, status, enabled, interval in result:
+            for lc_id, name, ip, port, model, status, enabled, interval, total in result:
                 current_devices.append({
                     "lc_id": lc_id,
                     "name": name,
@@ -145,7 +170,8 @@ class Service():
                     "model": model,
                     "status": status,
                     "enabled": enabled,
-                    "interval": interval
+                    "interval": interval,
+                    "total" : total
                 })
                 
         return current_devices
@@ -239,6 +265,11 @@ class Service():
 
         print(wxs_controllers_dit)
         self.init_devices()
+
+    def get_wxs_local_controllers(self):
+        print('get controllers')
+        get_lcs = requests.get(f"http://{self.api_server}")
+        return False
 
 
     def check_emulator_path(self, port):
@@ -360,7 +391,7 @@ class Service():
 
 
     def recreate_emulator_files(self):
-        serv.stop_emulators()
+        serv.stop_emulators(['all'])
         # sleep_print(3, 'recreate_emulator_files')
         try:
             try:
@@ -433,13 +464,16 @@ class Service():
         self.service_db.disconnect()
         self.service_db.join()
 
+    def update_total_users(self, device, total):
+        self.service_db.execute(f"update Main set TotalUsers = {total} where LocalControllerID = {device['lc_id']};")
+
     def check_connection(self, device):
         try:
             get_conn = requests.get(f'http://{device["ip_address"]}:{device["port"]}/emulator/get-status', timeout=2)  
             if get_conn.status_code in [200]: 
-                return True
+                return get_conn.json()
             else:
-                print(f'Failed or offline: {device["ip_address"]}:{device["port"]} = {get_conn.status_code}')
+                print(f'Failed or offline: {device["ip_address"]}:{device["port"]} = {get_conn.status_code} | TotalUsers: {get_conn.content}')
                 return False      
             
         except requests.exceptions.RequestException:
@@ -453,8 +487,9 @@ class Service():
     async def refresh_device_status(self):
         for dev in self.get_current_devices():
             try:
-                if self.check_connection(dev):
-                    print(f'>> {dev["ip_address"]}:{dev["port"]} = OK | Current Status= {dev["status"]}')
+                if (ret := self.check_connection(dev)):
+                    print(f'>> {dev["ip_address"]}:{dev["port"]} = OK | Current Status= {dev["status"]} |  DeviceInfo: {ret}')
+                    self.update_total_users(dev, ret["TotalUsers"])
                     self.devices_watchdog[dev['port']] = 0
                     if dev["status"] != "running":
                         self.service_db.execute(f"update Main set status = 'running' where LocalControllerID = {dev['lc_id']};")
@@ -512,9 +547,9 @@ class Service():
 
     def format_device_template(self, device_id):
         try:
-            result = self.service_db.select(f"select Name, Port, EventInterval, Status from Main where LocalControllerID = {device_id};")
+            result = self.service_db.select(f"select Name, Port, EventInterval, Status, TotalUsers from Main where LocalControllerID = {device_id};")
             trace(f"format_device_template: {result}")
-            name, port, interval, status = result[0]
+            name, port, interval, status, total = result[0]
         except Exception as ex:
             report_exception(ex)
 
@@ -522,6 +557,7 @@ class Service():
         _template = _template.replace("$name", str(name))
         _template = _template.replace("$port", str(port))
         _template = _template.replace("$interval", str(interval))
+        _template = _template.replace("$total", str(total))
 
         if status == 'running':
             button_start = 'btn-custom-disabled'
@@ -576,6 +612,7 @@ device_template = """
 <td class="text-center">$name</td>
 <td class="text-center" id="port_no">$port</td>
 <td class="text-center">$interval</td>
+<td class="text-center">$total</td>
 <td class="text-center">
 <a href="#" 
     class="btn btn-outline-success btn-sm $buttonStart"
@@ -596,40 +633,20 @@ $statusObj
 """
 if __name__ == '__main__':
     serv = Service()
-    serv.refresh_configured_devices()
+    # serv.refresh_configured_devices()
     # serv.start_emulators()
     # serv.check_emulator_path(8010)
+    # serv.get_wxs_local_controllers()
 
     serv.run_server()
-    # serv.refresh_configured_devices()
 
-    # serv.start_emulators()
-    # print()
-    # sleep_print(20)
-    # serv.stop()
-    
-    # serv.refresh_configured_devices()
-    # try:
-    #     trace('Aqui')
-    #     serv.start_emulators()
-    
-    # except Exception as ex:
-    #     print(f'*** {ex}')
-
-    # # sleep_print(20)
-    # # serv.recreate_emulator_files()
-
-    # sleep_print(20)
-    # # serv.stop_emulators()
-    # serv.stop()
-
-
-    # if is_admin():
-    #     print('admin')
-    # else:
-    #     print('Sem permissão')
-    #     script = sys.argv[0]
-    #     params = ' '.join([script] + sys.argv[1:])
-    #     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
-
-    # serv.recreate_emulator_files()
+    # SELECT 
+    #             LocalControllerID, 
+    #             LocalControllerName, 
+    #             IPAddress, 
+    #             BaseCommPort, 
+    #             LocalControllerEnabled,
+    #             LocalControllerType,
+    #             LocalControllerDescription 
+    #         FROM CfgHWLocalControllers
+    #         WHERE LocalControllerDescription like 'emulator%';

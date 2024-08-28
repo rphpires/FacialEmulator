@@ -34,6 +34,17 @@ class DahuaHandler():
         self.db_handler = db_handler
         trace('Starting DahuaHandler class...')
 
+    def get_total_users(self):
+        try:
+            ret = self.db_handler.select(f"select COUNT(*) from DahuaCard;")
+            if not ret:
+                return 0
+            
+            return ret[0][0]
+        
+        except Exception as ex:
+            report_exception(ex)
+
     def get_settings(self, cfg_id):
         try:
             ret = self.db_handler.select(f"select value from DeviceSettings where CfgId = '{cfg_id}';")
@@ -433,7 +444,8 @@ class DahuaEmulator(threading.Thread):
             try:
                 trace("/emulator/get-status: connect")
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                return {"CurrentDatetime": current_time}
+                count = self.dahua.get_total_users()
+                return {"CurrentDatetime": current_time, "TotalUsers" : count}
 
             except Exception as ex:
                 report_exception(ex)
@@ -805,7 +817,8 @@ table.Network.eth0.SubnetMask=255.255.248.0
         try:
             ## WebServer innitialization...
             trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-            uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
+            # uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
+            uvicorn.run(self.app, host=self.ip, port=self.port)
         except Exception as ex:
             report_exception(ex)
 

@@ -1,4 +1,5 @@
 venv
+venv-emulator
 **/__pycache__/
 TraceEmulator
 .pyarmor_capsule.zip

@@ -31,3 +31,10 @@ Any issue feel free email to jondy.zhao@gamil.com, or report it at
     https://github.com/dashingsoft/pyarmor/issues
 
 Enjoy it!
+
+
+>> New Environment
+
+Após uma nova instalaçaõ será necessário configurar o drive ODBC, pois no linux esta configuração não é nativa e 
+ainda não existe uma maneira simples de fazê-la.
+

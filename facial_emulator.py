@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
         if len(sys.argv) == 1: ## Debug Mode
             print("Required: python facial_emulator.py <IP Address> <port> <Device Type>")
-            ip = '172.20.112.122'
+            ip = '172.23.13.159'
             port = 1050
             device_type = 'Dahua'
             event_freq = 10 ## Seconds

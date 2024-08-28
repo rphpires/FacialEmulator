@@ -54,6 +54,10 @@ SELECT
 """)[0]    
     
     # -- Users --
+    def get_total_users(self):
+        count_users, _, _, _ = self.count_items()
+        return count_users
+
     def add_user(self, user_dict):
         try:
             trace(f'Insert Hikvision User: {user_dict}')
@@ -556,7 +560,8 @@ class HikvisionEmulator(threading.Thread):
             try:
                 trace("/emulator/get-status: connect")
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                return {"CurrentDatetime": current_time}
+                count = self.hikvision.get_total_users()
+                return {"CurrentDatetime": current_time, "TotalUsers" : count}
 
             except Exception as ex:
                 report_exception()
@@ -1088,7 +1093,8 @@ Content-Length: {len(content_length)}\r
         threading.Thread(target=self.scheduler).start()
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-        uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
+        # uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
+        uvicorn.run(self.app, host=self.ip, port=self.port)
 
         
 def still_running_trace():

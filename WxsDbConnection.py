@@ -9,8 +9,8 @@ import configparser
 from dotenv import load_dotenv
 import os
 
-
 load_dotenv()
+
 
 class DatabaseReader:
     def __init__(self):
@@ -124,3 +124,10 @@ class DatabaseReader:
 
         finally:
             return odbc
+
+
+
+if __name__ == "__main__":
+    conn = DatabaseReader()
+    r = conn.read_data("select count(*) from CHMain")
+    print(r)
