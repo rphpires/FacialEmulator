@@ -301,6 +301,15 @@ CREATE TABLE IF NOT EXISTS Main(
 [EventInterval] INTEGER,
 [TotalUsers] INTEGER
 );
+
+-- WXS Users to be Compared --
+CREATE TABLE IF NOT EXISTS UsersCount (
+[SiteControllerID] INTEGER,
+[LocalControllerID] INTEGER,
+[BaseCommPort] INTEGER,
+[WxsCount] INTEGER,
+[SiteControllerCount] INTEGER
+);
 """
 
 if __name__ == "__main__":

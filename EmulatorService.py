@@ -19,6 +19,7 @@ from fastapi_socketio import SocketManager
 from GlobalFunctions import *
 from GlobalConstants import *
 from DatabaseHandler import DatabaseHandler
+from cache_comparison import *
 
 import ctypes
 
@@ -41,19 +42,12 @@ class Service():
         self.ip = get_local_ip_address()
         self.port = 8080
 
-        # self.api_server = os.getenv("WXS_API_SERVER")
-        # self.api_user = os.getenv("WXS_API_USER")
-        # self.api_password = os.getenv("WXS_API_PASSWORD")
-        # self.api_url = 
-
         ## FastAPI config.
         self.app = FastAPI()
         self.sio = socketio.AsyncServer(async_mode='asgi')
         self.app.mount('/socket.io', socketio.ASGIApp(self.sio))
         self.templates = Jinja2Templates(directory="templates")
 
-
-    
         self.init_devices()
 
         ## ---------------------------------------
@@ -66,7 +60,6 @@ class Service():
         @self.sio.on('disconnect')
         async def disconnect(sid):
             print('Client disconnected')
-
 
         class Devices(BaseModel):
             devices: list[str]
@@ -114,7 +107,32 @@ class Service():
             print('>>> Recreating emulator executable: BEGIN')
             self.recreate_emulator_files()
             print('>>> Recreating emulator executable: END')
-            return RedirectResponse(url="/?recreate=true")
+            return RedirectResponse(url="/")
+        
+        @self.app.get("/comparison", response_class=HTMLResponse)
+        async def comparison_page(request: Request, page: int = 1, per_page: int = 10):
+            count_values = self.get_comparison_page_content()
+            # Paginação
+            total_devices = len(count_values)
+            start = (page - 1) * per_page
+            end = start + per_page
+            paginated_devices = count_values[start:end]
+
+            total_pages = (total_devices + per_page - 1) // per_page  # Calcula o total de páginas
+
+            context = {
+                "request": request,
+                "values": paginated_devices,
+                "page": page,
+                "total_pages": total_pages,
+                "per_page": per_page,
+            }
+            return self.templates.TemplateResponse('comparison.html', context )
+        
+        @self.app.get("/comparison_refresh", response_class=HTMLResponse)
+        async def comparison_refresh(request: Request):
+            self.refresh_users_comparison()
+            return RedirectResponse(url="/comparison")
         
         ## ---------------------------------
         ## ---------- API Methods ----------
@@ -147,13 +165,11 @@ class Service():
     ## ---------- Class Functions ----------
     ## -------------------------------------
 
-
     def init_devices(self):
         self.devices_watchdog = {}
         for device in self.get_current_devices():
             self.devices_watchdog[device["port"]] = 0
             self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {device['lc_id']};")
-
 
     def get_current_devices(self):
         current_devices = []
@@ -271,7 +287,6 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         get_lcs = requests.get(f"http://{self.api_server}")
         return False
 
-
     def check_emulator_path(self, port):
         try:
             running_path = 'running'
@@ -320,7 +335,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
             except Exception as ex:
                 report_exception(ex)
 
-    def start_emulators(self, devices = None): ## TODO: verificar se o processo já está em execução, se estiver não iniciar 
+    def start_emulators(self, devices = None):
         trace(f'Starting emulators process: {devices}')
         try:
             processes = []
@@ -366,7 +381,6 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         threading.Thread(target= self.run_emulator_process, args=(processes,)).start()
         # trace('Starting processes end.')
 
-
     def stop_emulators(self, devices):
         for root, dirs, files in os.walk('running'):
             try:
@@ -388,7 +402,6 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
 
             except Exception as ex:
                 report_exception(ex)
-
 
     def recreate_emulator_files(self):
         serv.stop_emulators(['all'])
@@ -434,7 +447,6 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
 
         self.delete_emulator_folder_content()
         #self.start_emulators()
-
 
     def delete_emulator_folder_content(self):
         directory_path = 'running'
@@ -580,17 +592,86 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
 
         return _template
 
-
-
     def start_emulator_with_delay(self, device_port):
         time.sleep(3)
         self.start_emulators([device_port])
 
+    def get_comparison_page_content(self):
+        current_values = []
+        result = self.service_db.select(f"""
+SELECT 
+    SiteControllerID, 
+    UsersCount.LocalControllerID,
+    Name, 
+    BaseCommPort,
+    WxsCount, 
+    SiteControllerCount, 
+    TotalUsers 
+FROM UsersCount
+JOIN Main ON Main.LocalControllerID = UsersCount.LocalControllerID;
+""")
+        if result:
+            for site_controller_id, local_controller_id, name, port, wxs_total, site_controller_total, em_total in result:
+                current_values.append({
+                    "site_controller_id": site_controller_id,
+                    "local_controller_id": local_controller_id,
+                    "name": name,
+                    "port": port,
+                    "wxs_total": wxs_total,
+                    "site_controller_total": site_controller_total,
+                    "emulator_total": em_total
+                })
+                
+        return current_values
+
     def refresh_device_status_wrapper(self):
         asyncio.run(self.refresh_device_status())
 
+    def refresh_users_comparison(self):
+        ret = wxs_count_chids_by_local_controller(sql)
+        for site_controller_id, lcs in ret.items():
+            try:
+                for lc_id, content in lcs.items():
+                    if (db := self.service_db.select(f"select SiteControllerID, BaseCommPort from UsersCount where LocalControllerID = {lc_id};")):
+                        if db[0][0] != site_controller_id:
+                            # Atualiza o SitControllerID caso o emulator tenha sido trocado de gerenciador.
+                            self.service_db.execute(f"update UsersCount set WxsCount = {content[1]}, SiteControllerID = {site_controller_id} where LocalControllerID= {lc_id}")
+                        
+                        elif db[0][1] != content[0]:
+                            # Atualiza a porta de comunicação caso o emulator tenha sido alterado.
+                            self.service_db.execute(f"update UsersCount set WxsCount = {content[1]}, BaseCommPort = {content[0]} where LocalControllerID= {lc_id}")
+                        
+                        else:
+                            self.service_db.execute(f"update UsersCount set WxsCount = {content[1]} where LocalControllerID= {lc_id}")
+                    
+                    else:
+                        # Insere no banco caso a linha não exista.
+                        self.service_db.execute(
+                            f"insert into UsersCount values (?,?,?,?,?)",
+                            (site_controller_id, lc_id, content[0], content[1], 0)
+                        )   
+            
+            except Exception as ex:
+                report_exception(ex)
+
+        count_db = count_users_in_sitecontroller_db(sql)
+        try:
+            # result_content[lc_id][port] = total
+            for _site_controller_id, _content in count_db.items():
+                for port, _total in _content.items():
+                    try:
+                        trace(f"Atualizando contagem do Emulador: {port} | Total= {_total}")
+                        self.service_db.execute(f"update UsersCount set SiteControllerCount = {_total} where BaseCommPort={port};")
+
+                    except Exception as ex:
+                        report_exception(ex)            
+        except Exception as ex:
+            report_exception(ex)
+
     def scheduler(self):
         schedule.every(10).seconds.do(self.refresh_device_status_wrapper)
+        schedule.every(60).seconds.do(self.refresh_users_comparison)
+
         while True:
             schedule.run_pending()   
             time.sleep(1)
@@ -631,22 +712,13 @@ device_template = """
 $statusObj
 </tr>
 """
+
+
 if __name__ == '__main__':
     serv = Service()
+    serv.run_server()
+
     # serv.refresh_configured_devices()
     # serv.start_emulators()
     # serv.check_emulator_path(8010)
     # serv.get_wxs_local_controllers()
-
-    serv.run_server()
-
-    # SELECT 
-    #             LocalControllerID, 
-    #             LocalControllerName, 
-    #             IPAddress, 
-    #             BaseCommPort, 
-    #             LocalControllerEnabled,
-    #             LocalControllerType,
-    #             LocalControllerDescription 
-    #         FROM CfgHWLocalControllers
-    #         WHERE LocalControllerDescription like 'emulator%';

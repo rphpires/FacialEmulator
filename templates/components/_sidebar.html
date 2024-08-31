@@ -8,6 +8,20 @@
       <div class="collapse d-sm-block" id="menuCollapse">
         <ul class="nav flex-column align-items-start" id="menu">
           <li>
+            <a href="{{ url_for('main_page') }}" 
+              class="nav-link px-0 align-middle" 
+              style="background: none; border: none; color: rgb(5, 5, 5); cursor: pointer; ">
+              <i class="bi bi-tablet fs-4"></i>
+              <span class="ms-1">Dispositivos</span>
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('comparison_page') }}" class="nav-link px-0 align-middle" style="background: none; border: none; color: rgb(5, 5, 5); cursor: pointer; ">
+              <i class="bi bi-arrow-left-right fs-4"></i>
+              <span class="ms-1">Comparação</span>
+            </a>
+          </li>
+          <li>
             <button class="nav-link px-0 align-middle" style="background: none; border: none; color: green; cursor: pointer;" onclick="start_all_emulators()">
               <i class="bi bi-play-circle fs-4" style="color: green;"></i>
               <span class="ms-1">Iniciar Todos</span>
@@ -67,3 +81,4 @@
     };
 
   </script>
+
