@@ -1,0 +1,9 @@
+{
+    "server_name": "172.16.17.101\\W_ACCESS",
+    "db_name": "W_Access",
+    "db_user": "sa",
+    "db_password": "#w_access_Adm#",
+    "wxs_api_url": "http://172.16.17.100/W-AccessAPI/v1/",
+    "wxs_api_user": "WAccessAPI",
+    "wxs_api_password": "#WAccessAPI#"
+}
