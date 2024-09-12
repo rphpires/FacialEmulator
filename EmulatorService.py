@@ -66,7 +66,17 @@ class Service():
 
         @self.app.api_route("/", methods=["GET", "POST"], response_class=HTMLResponse)
         async def main_page(request: Request, page: int = 1, per_page: int = 10):
-            devices = self.get_current_devices()
+            devices, device_status_ok = self.get_current_devices()
+            count_values, comparison_status_ok = self.get_comparison_page_content()
+            qnt_total_emulators = len(count_values)
+            counter_cards = {
+                "total": qnt_total_emulators,
+                "comparison_status_ok" : comparison_status_ok,
+                "comparison_status_error" : qnt_total_emulators - comparison_status_ok,
+                "running": device_status_ok,
+                "stopped": qnt_total_emulators - device_status_ok
+            }
+
             # Paginação
             total_devices = len(devices)
             start = (page - 1) * per_page
@@ -81,6 +91,7 @@ class Service():
                 "page": page,
                 "total_pages": total_pages,
                 "per_page": per_page,
+                "counter_cards": counter_cards
             }
             return self.templates.TemplateResponse('devices.html', context )
        
@@ -111,14 +122,23 @@ class Service():
         
         @self.app.get("/comparison", response_class=HTMLResponse)
         async def comparison_page(request: Request, page: int = 1, per_page: int = 10):
-            count_values = self.get_comparison_page_content()
+            devices, device_status_ok = self.get_current_devices()
+            count_values, comparison_status_ok = self.get_comparison_page_content()
+            qnt_total_emulators = len(count_values)
+            counter_cards = {
+                "total": qnt_total_emulators,
+                "comparison_status_ok" : comparison_status_ok,
+                "comparison_status_error" : qnt_total_emulators - comparison_status_ok,
+                "running": device_status_ok,
+                "stopped": qnt_total_emulators - device_status_ok
+            }
+
             # Paginação
-            total_devices = len(count_values)
             start = (page - 1) * per_page
             end = start + per_page
             paginated_devices = count_values[start:end]
 
-            total_pages = (total_devices + per_page - 1) // per_page  # Calcula o total de páginas
+            total_pages = (qnt_total_emulators + per_page - 1) // per_page  # Calcula o total de páginas
 
             context = {
                 "request": request,
@@ -126,6 +146,7 @@ class Service():
                 "page": page,
                 "total_pages": total_pages,
                 "per_page": per_page,
+                "counter_cards": counter_cards
             }
             return self.templates.TemplateResponse('comparison.html', context )
         
@@ -167,17 +188,23 @@ class Service():
 
     def init_devices(self):
         self.devices_watchdog = {}
-        for device in self.get_current_devices():
+        ret_device, _ = self.get_current_devices()
+        for device in ret_device:
             self.devices_watchdog[device["port"]] = 0
             self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {device['lc_id']};")
 
     def get_current_devices(self):
         current_devices = []
+        device_status_running = 0
+
         result = self.service_db.select(f"""
 select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventInterval, TotalUsers from Main;
 """)
         if result:
             for lc_id, name, ip, port, model, status, enabled, interval, total in result:
+                if status == 'running':
+                    device_status_running += 1 
+
                 current_devices.append({
                     "lc_id": lc_id,
                     "name": name,
@@ -190,7 +217,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
                     "total" : total
                 })
                 
-        return current_devices
+        return current_devices, device_status_running
     
     def get_missing_keys(self, local_devices, wxs_controllers_dit):
         # Obter as chaves de ambos os dicionários
@@ -494,10 +521,18 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
 
     async def update_device_status(self, device_id: int, status: str):
         trace(f'------ Gerando update para o controlador: {device_id}')
-        await self.sio.emit('update_device_status', {'device_id': device_id, 'updated_html': self.format_device_template(device_id) })
+        await self.sio.emit(
+            'update_device_status', 
+            {
+                'device_id': device_id, 
+                'updated_html': self.format_device_template(device_id),
+                'counter_cards' : self.format_counters()
+            }
+        )
 
     async def refresh_device_status(self):
-        for dev in self.get_current_devices():
+        devices, _ = self.get_current_devices()
+        for dev in devices:
             try:
                 if (ret := self.check_connection(dev)):
                     print(f'>> {dev["ip_address"]}:{dev["port"]} = OK | Current Status= {dev["status"]} |  DeviceInfo: {ret}')
@@ -557,6 +592,19 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         except Exception as ex:
             report_exception(ex)
 
+    def format_counters(self):
+        try:
+            devices, device_status_running = self.get_current_devices()
+            qnt_total_emulators = len(devices)
+            return {
+                "total": qnt_total_emulators,
+                "running": device_status_running,
+                "stopped": qnt_total_emulators - device_status_running
+            }
+
+        except Exception as ex:
+            report_exception(ex)
+
     def format_device_template(self, device_id):
         try:
             result = self.service_db.select(f"select Name, Port, EventInterval, Status, TotalUsers from Main where LocalControllerID = {device_id};")
@@ -598,6 +646,8 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
 
     def get_comparison_page_content(self):
         current_values = []
+        comparison_status_ok = 0
+
         result = self.service_db.select(f"""
 SELECT 
     SiteControllerID, 
@@ -612,6 +662,9 @@ JOIN Main ON Main.LocalControllerID = UsersCount.LocalControllerID;
 """)
         if result:
             for site_controller_id, local_controller_id, name, port, wxs_total, site_controller_total, em_total in result:
+                if wxs_total == site_controller_total == em_total:
+                    comparison_status_ok += 1 
+                
                 current_values.append({
                     "site_controller_id": site_controller_id,
                     "local_controller_id": local_controller_id,
@@ -622,7 +675,7 @@ JOIN Main ON Main.LocalControllerID = UsersCount.LocalControllerID;
                     "emulator_total": em_total
                 })
                 
-        return current_values
+        return current_values, comparison_status_ok
 
     def refresh_device_status_wrapper(self):
         asyncio.run(self.refresh_device_status())

@@ -277,6 +277,12 @@
     const deviceRow = document.querySelector(`#device_${data.device_id}`);
     console.log('Selecionado:', deviceRow);
 
+    const runningCounter = document.querySelector(`#counter_running`);
+    console.log('Counter running card:', runningCounter);
+
+    const stoppedCounter = document.querySelector(`#counter_stopped`);
+    console.log('Counter running card:', stoppedCounter);
+
     if (deviceRow) {
       // Atualiza o conteúdo da linha da tabela com o HTML fornecido
       deviceRow.innerHTML = data.updated_html;
@@ -284,6 +290,25 @@
     } else {
       console.log('Linha não encontrada:', data.device_id);
     }
+
+    if (runningCounter) {
+      // Atualiza contagem de emuladores em execução
+      runningCounter.innerHTML = data.counter_cards.running;
+      console.log('Contagem "running" atualizada com sucesso.');
+    }
+    else {
+      console.log('Linha não encontrada:', data.counter_cards.running);
+    }
+
+    if (stoppedCounter) {
+      // Atualiza contagem de emuladores em execução
+      stoppedCounter.innerHTML = data.counter_cards.stopped;
+      console.log('Contagem "stopped" atualizada com sucesso.');
+    }
+    else {
+      console.log('Linha não encontrada:', data.counter_cards.stopped);
+    }
+
   });
 
 </script>

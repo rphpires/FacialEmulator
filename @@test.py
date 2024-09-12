@@ -1,12 +1,11 @@
-import platform
 
 
-os_type = platform.system()
-if os_type == "Windows":
-    print("Windows")
-elif os_type == "Linux":
-    print("Linux")
-elif os_type == "Darwin":
-    print("MacOS")
-else:
-    print("Unknown")
+
+
+def get_count():
+    t = 0
+    return ['text', 'casa'], t
+
+r,c = get_count()
+
+print(r, c)
