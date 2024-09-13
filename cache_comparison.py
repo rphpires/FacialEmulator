@@ -173,4 +173,3 @@ def list_items_in_path():
     for file in files:
         print(file)
 
-# list_items_in_path()
