@@ -1,8 +1,11 @@
-## Create exe command: pyinstaller --onefile user_actions.py
+## Create exe command: PyInstaller --onefile user_actions.py
 
 import requests
 import sys
+import keyboard
+import os
 
+from time import sleep
 from colorama import init as colorama_init
 from colorama import Fore
 from colorama import Style
@@ -172,21 +175,25 @@ def select_operation():
             print(f"{Fore.RED}Erro: {e}. Tente novamente.{Style.RESET_ALL}")
 
 
-operation = select_operation()
-total_users = get_total_users_to_assing()
+while True:
+    operation = select_operation()
+    total_users = get_total_users_to_assing()
 
-match operation:
-    case 1:
-        access_level_id = get_access_level_id()
-        assign_access_levels(total_users, access_level_id)
-    case 2:
-        access_level_id = get_access_level_id()
-        remove_access_levels(total_users, access_level_id)
-    case 3:
-        access_level_id = get_access_level_id()
-        start_visits(total_users, access_level_id)
-    case 4:
-        end_visits(total_users)
+    match operation:
+        case 1:
+            access_level_id = get_access_level_id()
+            assign_access_levels(total_users, access_level_id)
+        case 2:
+            access_level_id = get_access_level_id()
+            remove_access_levels(total_users, access_level_id)
+        case 3:
+            access_level_id = get_access_level_id()
+            start_visits(total_users, access_level_id)
+        case 4:
+            end_visits(total_users)
 
-    case _:
-        print(f'{Fore.RED}Operação inválida!{Style.RESET_ALL}')
+        case _:
+            print(f'{Fore.RED}Operação inválida!{Style.RESET_ALL}')
+
+    sleep(2)
+    print("----------------------------------------------------------\n\n", end='')
