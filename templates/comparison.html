@@ -8,7 +8,7 @@
       <h3 class="display-8">Comparação</h3>
     </div>
     <div class="col-md-6 text-end">
-      <button class="btn btn-outline-primary ms-2" onclick="refresh_counter()">
+      <button class="btn btn-outline-primary ms-2" onclick="showPopup()">
         <i class="bi bi-arrow-clockwise"></i> Refresh
       </button>
     </div>
@@ -87,6 +87,16 @@
   </div>
 </div>
   
+
+<div class="overlay" id="popupOverlay">
+  <div class="popup">
+      <p>Para prosseguir confirme que o serviço dos gerenciadores virtuais esteja parado.</p>
+      <button class="confirm" onclick="confirmAction()">Confirmar</button>
+      <button class="cancel" onclick="cancelAction()">Cancelar</button>
+  </div>
+</div>
+
+
 <script>
   function changePerPage() {
     const perPage = document.getElementById('per-page-select').value;
@@ -106,6 +116,31 @@
         alert('Erro ao iniciar emuladores.');
       }
     };
+
+  function showPopup() {
+    document.getElementById('popupOverlay').style.display = 'block';
+  }
+
+  // Função para confirmar a ação
+  function confirmAction() {
+    document.getElementById('popupOverlay').style.display = 'none';
+    // Coloque o código para prosseguir com o processo aqui
+    //alert('Serviço confirmado. Prosseguindo com o processo.');
+    // Exemplo de chamada de função, substitua por sua lógica
+    refresh_counter();
+  }
+
+  // Função para cancelar a ação
+  function cancelAction() {
+    document.getElementById('popupOverlay').style.display = 'none';
+    // Não faz nada, apenas fecha o pop-up
+  }
+
+  // Função de exemplo que você já tem (substitua com sua lógica real)
+  function refresh_counter() {
+    alert('Refresh acionado!');
+  }
+      
 </script>
 
 <style>
@@ -116,6 +151,47 @@
   /* Aumentando a especificidade para garantir que a cor seja aplicada corretamente */
   #count-table tbody tr.bg-danger-subtle {
     background-color: #f8d7da !important;
+  }
+  .overlay {
+    display: none; /* Inicialmente escondido */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1;
+  }
+
+  /* Estilo para o conteúdo do pop-up */
+  .popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    text-align: center;
+  }
+
+  .popup button {
+    margin: 10px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .popup .confirm {
+    background-color: #4CAF50;
+    color: white;
+  }
+
+  .popup .cancel {
+    background-color: #f44336;
+    color: white;
   }
 </style>
 

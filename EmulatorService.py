@@ -710,7 +710,7 @@ JOIN Main ON Main.LocalControllerID = UsersCount.LocalControllerID;
         count_db = count_users_in_sitecontroller_db(sql)
         try:
             # result_content[lc_id][port] = total
-            for _site_controller_id, _content in count_db.items():
+            for _, _content in count_db.items():
                 for port, _total in _content.items():
                     try:
                         trace(f"Atualizando contagem do Emulador: {port} | Total= {_total}")
@@ -723,7 +723,7 @@ JOIN Main ON Main.LocalControllerID = UsersCount.LocalControllerID;
 
     def scheduler(self):
         schedule.every(10).seconds.do(self.refresh_device_status_wrapper)
-        schedule.every(60).seconds.do(self.refresh_users_comparison)
+        # schedule.every(60).seconds.do(self.refresh_users_comparison)
 
         while True:
             schedule.run_pending()   
