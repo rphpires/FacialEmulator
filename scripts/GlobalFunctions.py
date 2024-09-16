@@ -3,8 +3,8 @@ import datetime
 import platform
 import socket
 
-from Tracer import *
-from WxsDbConnection import *
+from scripts.Tracer import *
+from scripts.WxsDbConnection import *
 
 class GlobalInfo:
     gmt_timedelta = datetime.timedelta(hours=-3)

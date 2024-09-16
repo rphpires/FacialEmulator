@@ -1,6 +1,6 @@
 
 
-from GlobalFunctions import *
+from scripts.GlobalFunctions import *
 
 import uvicorn
 import hashlib, base64
@@ -12,7 +12,7 @@ import schedule
 import json
 import pathlib
 
-from FakeEventImage import photo_img
+from scripts.FakeEventImage import photo_img
 
 from fastapi import FastAPI, Response, WebSocket, Request, Body, Query
 from starlette.responses import StreamingResponse # PlainTextResponse

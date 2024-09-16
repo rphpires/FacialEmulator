@@ -16,8 +16,8 @@ from pydantic import BaseModel
 from typing import Any
 from datetime import datetime, timezone, timedelta
 
-from GlobalFunctions import *
-from FakeEventImage import photo_img
+from scripts.GlobalFunctions import *
+from scripts.FakeEventImage import photo_img
 
 class HikvisionHandler():
     def __init__(self, db_handler) -> None:

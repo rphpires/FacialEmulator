@@ -8,6 +8,9 @@ import schedule
 import asyncio
 import socketio
 import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fastapi import FastAPI, Response, Request, WebSocket
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
@@ -16,10 +19,10 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from fastapi_socketio import SocketManager
 
-from GlobalFunctions import *
-from GlobalConstants import *
-from DatabaseHandler import DatabaseHandler
-from cache_comparison import *
+from scripts.GlobalFunctions import *
+from scripts.GlobalConstants import *
+from scripts.DatabaseHandler import DatabaseHandler
+from scripts.cache_comparison import *
 
 import ctypes
 

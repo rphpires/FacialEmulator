@@ -3,7 +3,7 @@ import sys
 import threading
 import time
 
-import GlobalFunctions
+import scripts.GlobalFunctions as GlobalFunctions
 
 TRACE_FILE_NAME = 'TraceEmulator/trace.html'
 

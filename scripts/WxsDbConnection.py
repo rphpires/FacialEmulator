@@ -110,7 +110,7 @@ class DatabaseReader:
 
     def get_odbc_client(self):
         try:
-            from GlobalFunctions import check_os
+            from scripts.GlobalFunctions import check_os
             
             match check_os():
                 case 'Linux':
