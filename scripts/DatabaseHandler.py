@@ -1,19 +1,17 @@
-
 # Descrição: Arquivo base para conexão com o banco de dados
 # Desenvolvido por: Raphael Pires
 # Última Revisão: 09/08/2023
-
 
 import threading
 import sqlite3
 import os
 import datetime
 import time
-
-from threading import Thread
+import sys
 import queue
 
-from GlobalFunctions import *
+from threading import Thread
+from scripts.GlobalFunctions import *
 
 
 class DatabaseHandler(Thread):
@@ -33,7 +31,7 @@ class DatabaseHandler(Thread):
 
     def create_db_connection(self):
         try:
-            file_connection = sqlite3.connect(f"database.db")
+            file_connection = sqlite3.connect(self.database_path)
             file_connection.text_factory = lambda x: str(x, "utf-8", "ignore")
             db_cursor = file_connection.cursor()
             db_cursor.execute("PRAGMA synchronous=OFF")
@@ -49,13 +47,13 @@ class DatabaseHandler(Thread):
             ret = True
             for _ in range(2):
                 try:
-                    print("Opening %s file" % ("database.db"))
+                    print("Opening %s file" % (self.database_path))
                     self.file_connection, self.db_cursor = self.create_db_connection()
                     return True
                 except sqlite3.DatabaseError:
                     try:
-                        if os.path.exists(f"database.db"):
-                            os.remove(f"database.db")
+                        if os.path.exists(self.database_path):
+                            os.remove(self.database_path)
                         
                     except OSError as s:
                         print(str(s))
@@ -189,10 +187,12 @@ class DatabaseHandler(Thread):
             case 'emulator':
                 self.db_creation_string = EMULATOR_DB_CREATION_STRING
                 self.test_query = "SELECT RecNo FROM DahuaCard LIMIT 1;"
+                self.database_path = 'database.db'
                 
             case 'service':
                 self.db_creation_string = SERVICE_DB_CREATION_STRING
                 self.test_query = "SELECT LocalControllerID FROM Main LIMIT 1;"
+                self.database_path = r'data/database.db'
                 
 
     def create_db(self):

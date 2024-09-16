@@ -1,6 +1,6 @@
 import sqlite3
 
-from WxsDbConnection import DatabaseReader
+from scripts.WxsDbConnection import DatabaseReader
 
 
 sql = DatabaseReader()

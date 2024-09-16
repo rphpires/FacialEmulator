@@ -1,5 +1,5 @@
 
-from GlobalFunctions import check_os
+from scripts.GlobalFunctions import check_os
 
 EMULATOR_DIST_PATH = "dist"
 

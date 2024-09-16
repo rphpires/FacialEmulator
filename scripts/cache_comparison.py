@@ -4,8 +4,8 @@ import os
 import shutil
 import subprocess
 
-from GlobalFunctions import *
-from WxsDbConnection import DatabaseReader
+from scripts.GlobalFunctions import *
+from scripts.WxsDbConnection import DatabaseReader
 
 
 sql = DatabaseReader()

@@ -7,11 +7,11 @@ import os
 import pathlib
 # from PyInstaller.utils.hooks import collect_all
 
-from DatabaseHandler import DatabaseHandler
-from GlobalFunctions import *
+from scripts.DatabaseHandler import DatabaseHandler
+from scripts.GlobalFunctions import *
 
-from EmulatorDahua import DahuaEmulator
-from EmulatorHikvision import HikvisionEmulator
+from scr.emulators.EmulatorDahua import DahuaEmulator
+from scr.emulators.EmulatorHikvision import HikvisionEmulator
 
 # datas, binaries, hiddenimports = collect_all('pyarmor')
 
