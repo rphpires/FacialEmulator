@@ -24,23 +24,23 @@ if __name__ == "__main__":
         if len(sys.argv) == 1: ## Debug Mode
             print("Required: python facial_emulator.py <IP Address> <port> <Device Type>")
             ip = '172.23.13.159'
-            port = 1050
+            port = 8025
             device_type = 'Dahua'
+            log_init_file = True
             event_freq = 10 ## Seconds
-            log_init_file = '.log.ini'
         else:
             ip = sys.argv[1]
             port = int(sys.argv[2])
             device_type = sys.argv[3]
-            if len(sys.argv) == 5:
+            log_init_file = True if sys.argv[4] == '1' else False
+            if len(sys.argv) == 6:
                 trace('Setting interval to generate fake events')
-                event_freq = int(sys.argv[4]) ## Seconds 
+                event_freq = int(sys.argv[5]) ## Seconds 
             else:
-                event_freq = 0
-            log_init_file = '../../.log.ini'
+                event_freq = 0            
     
         # innitialize_tracer(port)   
-        trace(f'Innitializing emulator with parameters: Device Type= {device_type}, IP= {ip} and Port= {port}') 
+        trace(f'Innitializing emulator with parameters: Device Type= {device_type}, IP= {ip} and Port= {port}, FastAPI Log Enabled= {log_init_file}') 
 
     except Exception as ex:
         report_exception(ex)

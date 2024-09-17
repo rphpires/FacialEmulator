@@ -325,76 +325,77 @@ records[{i}].ValidDateStart={ValidDateStart}
         return record
 
     def generate_random_event(self, emulator):
-        evt = self.db_handler.select("""
+        try:
+            evt = self.db_handler.select("""
 SELECT name, cardNo, u.employeeNo from hikvisionUser u
 JOIN HikvisionCard c ON c.employeeNo = u.employeeNo
 ORDER BY RANDOM() LIMIT 1;""")
-        
-        if not evt:
-            trace(f"generate_random_event: skipping, there's no user in current database.")
-            return False
-        
-        (Name, CardNo, EmployeeNo) = evt[0]
+            
+            if not evt:
+                trace(f"generate_random_event: skipping, there's no user in current database.")
+                return False
+            
+            (Name, CardNo, EmployeeNo) = evt[0]
 
-        current_datetime = datetime.datetime.now()
-        hora_atual_fuso = current_datetime.astimezone(timezone(timedelta(hours=-3)))
+            current_datetime = datetime.datetime.now()
+            hora_atual_fuso = current_datetime.astimezone(timezone(timedelta(hours=-3)))
 
-        gen_evt = {
-            "ipAddress": emulator.ip,
-            "ipv6Address": "fe80::be5e:33ff:fe57:a5cb",
-            "portNo": emulator.port,
-            "protocol": "HTTP",
-            "macAddress": emulator.mac_address,
-            "channelID": 1,
-            "dateTime": hora_atual_fuso.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "activePostCount": 1,
-            "eventType": "AccessControllerEvent",
-            "eventState": "active",
-            "eventDescription": "Access Controller Event",
-            "AccessControllerEvent": {
-                "deviceName": "subdoorOne",
-                "majorEventType": 5,
-                "subEventType": 75,
-                "cardNo": CardNo,
-                "cardType": 1,
-                "name": Name,
-                "cardReaderKind": 1,
-                "cardReaderNo": 1,
-                "verifyNo": 189,
-                "employeeNoString": str(EmployeeNo),
-                "serialNo": 4435,
-                "userType": "normal",
-                "currentVerifyMode": "faceOrFpOrCardOrPw",
-                "currentEvent": True,
-                "frontSerialNo": 4434,
-                "attendanceStatus": "undefined",
-                "label": "",
-                "statusValue": 0,
-                "mask": "no",
-                "helmet": "unknown",
-                "picturesNumber": 1,
-                "purePwdVerifyEnable": True,
-                "FaceRect": {
-                    "height": 0.268,
-                    "width": 0.477,
-                    "x": 0.286,
-                    "y": 0.354
-                },
-                "unlockRoomNo": "3723243075"
+            gen_evt = {
+                "ipAddress": emulator.ip,
+                "ipv6Address": "fe80::be5e:33ff:fe57:a5cb",
+                "portNo": emulator.port,
+                "protocol": "HTTP",
+                "macAddress": emulator.mac_address,
+                "channelID": 1,
+                "dateTime": hora_atual_fuso.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "activePostCount": 1,
+                "eventType": "AccessControllerEvent",
+                "eventState": "active",
+                "eventDescription": "Access Controller Event",
+                "AccessControllerEvent": {
+                    "deviceName": "subdoorOne",
+                    "majorEventType": 5,
+                    "subEventType": 75,
+                    "cardNo": CardNo,
+                    "cardType": 1,
+                    "name": Name,
+                    "cardReaderKind": 1,
+                    "cardReaderNo": 1,
+                    "verifyNo": 189,
+                    "employeeNoString": str(EmployeeNo),
+                    "serialNo": 4435,
+                    "userType": "normal",
+                    "currentVerifyMode": "faceOrFpOrCardOrPw",
+                    "currentEvent": True,
+                    "frontSerialNo": 4434,
+                    "attendanceStatus": "undefined",
+                    "label": "",
+                    "statusValue": 0,
+                    "mask": "no",
+                    "helmet": "unknown",
+                    "picturesNumber": 1,
+                    "purePwdVerifyEnable": True,
+                    "FaceRect": {
+                        "height": 0.268,
+                        "width": 0.477,
+                        "x": 0.286,
+                        "y": 0.354
+                    },
+                    "unlockRoomNo": "3723243075"
+                }
             }
-        }
-        content_length = f'''{json.dumps(gen_evt, indent=2)}'''
+            content_length = f'''{json.dumps(gen_evt, indent=2)}'''
 
-        evt_package = f"""\r
+            evt_package = f"""\r
 --MIME_boundary\r
 Content-Type: application/json; charset="UTF-8"\r
 Content-Length: {len(content_length)}\r
 \r
 """ 
-        evt_package += f'''{json.dumps(gen_evt, indent=2)}'''
-        image_content = base64.b64decode(photo_img)
-                
-        data_photo = f"""\r
+            evt_package += f'''{json.dumps(gen_evt, indent=2)}'''
+            image_content = base64.b64decode(photo_img)
+                    
+            data_photo = f"""\r
 --MIME_boundary\r
 Content-Disposition: form-data; name="Picture"; filename="Picture.jpg"\r
 Content-Type: image/jpeg\r
@@ -402,7 +403,10 @@ Content-Length: {len(image_content)}\r
 Content-ID: pictureImage\r
 \r""".encode('utf-8')
         
-        return evt_package.encode('utf-8') + data_photo + image_content
+            return evt_package.encode('utf-8') + data_photo + image_content
+        
+        except Exception as ex:
+            report_exception(ex)
 
     def generate_online_event(self, mac_address):
         trace(f"generate_online_event: {mac_address = }")
@@ -519,7 +523,7 @@ class HikvisionEmulator(threading.Thread):
         self.ip = ip
         self.port = port
         self.db_handler = db_handler
-        self.log_init_file = log_init_file
+        self.log_init = log_init_file
         
         self.hikvision = HikvisionHandler(db_handler)
         self.app = FastAPI()
@@ -813,7 +817,6 @@ class HikvisionEmulator(threading.Thread):
         async def get_remote_face(user_id: str):
             return self.hikvision.get_face(user_id)
             
-        
         @self.app.put(intelli_url + "/FDSearch/Delete") ## TODO: Test
         async def put_fingerprint_uploader(item: dict):
             try:
@@ -971,13 +974,14 @@ class HikvisionEmulator(threading.Thread):
         @self.app.put(event_url + "/httpHosts") ## TODO: Implement function
         async def set_device_info(item: dict):
             trace(f"Receiving configuration from server")
-
             server_dict = xmltodict.parse(item)
-
             return "OK"
+
+        @self.app.get(event_url + "/alertStream") ## TODO: Implement Function
+        async def GetAlertStream():
+            trace(f"[GET] system_url + /alertStream")
+            return AsyncGeneratorResponse(self.generate_heartbeat())
         
-
-
         class AsyncGeneratorResponse(StreamingResponse):
             def __init__(self, agen):
                 self.agen = agen
@@ -985,18 +989,9 @@ class HikvisionEmulator(threading.Thread):
 
             async def iter_content(self):
                 async for chunk in self.agen:
-                    yield chunk
+                    yield chunk    
 
-        @self.app.get(event_url + "/alertStream") ## TODO: Implement Function
-        async def GetAlertStream():
-            trace(f"[GET] system_url + /alertStream")
-            return AsyncGeneratorResponse(self.generate_heartbeat())
-        
-        # @self.app.get("/cgi-bin/snapManager.cgi")
-        # async def heartbeat(request: Request):
-        #     trace("[GET] /cgi-bin/snapManager.cgi")
-        #     return AsyncGeneratorResponse(self.generate_heartbeat())
-
+    
     async def generate_heartbeat(self):
         heartbeat_counter = time.time()
         self.genereted_event_counter = time.time()
@@ -1005,17 +1000,25 @@ class HikvisionEmulator(threading.Thread):
             now = time.time()
             if self.generated_event and (now - self.genereted_event_counter >= self.generated_event_frequency):
                 trace(f'>> Sending Generated Fake Event <<')
-                self.genereted_event_counter= time.time()
-                evt_package = self.hikvision.generate_random_event(self)
+                try:
+                    self.genereted_event_counter= time.time()
+                    evt_package = self.hikvision.generate_random_event(self)
 
-                if evt_package and self.hikvision.get_settings("LocalAuthentication") == '1':
-                    yield evt_package
+                    if evt_package and self.hikvision.get_settings("LocalAuthentication") == '1':
+                        yield evt_package
+
+                except Exception as ex:
+                    report_exception(ex)
 
             if now - heartbeat_counter >= 10:
-                trace('>> Sending Heartbeat <<')
-                heartbeat_counter = now
-                yield self.get_heartbeat_msg()
-            
+                try:
+                    trace('>> Sending Heartbeat <<')
+                    heartbeat_counter = now
+                    yield self.get_heartbeat_msg()
+                
+                except Exception as ex:
+                    report_exception(ex)
+
             # if self.hikvision.get_settings("LocalAuthentication") == '0':
             #     break
 
@@ -1043,7 +1046,6 @@ Content-Length: {len(content_length)}\r
 \r
 """     
         return f'''{heartbeat_boundary + json.dumps(hearbeat, indent=2)}\r'''
-
 
     ### ------------------------------------------------------------------
     ### ------------------------ Online events ---------------------------
@@ -1093,8 +1095,10 @@ Content-Length: {len(content_length)}\r
         threading.Thread(target=self.scheduler).start()
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-        # uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
-        uvicorn.run(self.app, host=self.ip, port=self.port)
+        if self.log_init:
+            uvicorn.run(self.app, host=self.ip, port=self.port, log_config='../../.log.ini')
+        else:
+            uvicorn.run(self.app, host=self.ip, port=self.port)
 
         
 def still_running_trace():

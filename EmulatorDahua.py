@@ -365,7 +365,6 @@ Content-Disposition: form-data; name="file"\r
             report_exception(ex)
             return None, None
         
-
     def get_door_event(self, status, mac_address):
         try:
             current_datetime = datetime.utcnow()
@@ -403,7 +402,7 @@ class DahuaEmulator(threading.Thread):
         self.ip = ip
         self.port = port
         self.generated_event_frequency = event_freq
-        self.log_init_file = log_init_file
+        self.log_init = log_init_file
 
         self.dahua = DahuaHandler(db_handler)
         self.app = FastAPI()
@@ -573,7 +572,6 @@ table.Network.eth0.SubnetMask=255.255.248.0
                 print(ex)
 
         @self.app.post("/cgi-bin/FaceInfoManager.cgi")
-        #async def PostFaceInfoManager(action: dict, body: str = Body(...)):
         async def PostFaceInfoManager(request: Request, str = Body(...)):
             action = request.query_params["action"]
             UserID = str["UserID"]
@@ -609,7 +607,6 @@ table.Network.eth0.SubnetMask=255.255.248.0
             except Exception as ex:
                 print(ex)
 
-
         ### ------------------------------- recordFinder -----------------------------
         @self.app.get('/cgi-bin/recordFinder.cgi')
         async def GetRecordFinder(
@@ -633,7 +630,6 @@ table.Network.eth0.SubnetMask=255.255.248.0
 
             except Exception as ex:
                 print(ex)
-
 
         ### ------------------------------- recordUpdater -----------------------------
         @self.app.get('/cgi-bin/recordUpdater.cgi')
@@ -661,7 +657,6 @@ table.Network.eth0.SubnetMask=255.255.248.0
                         else:
                             return handle_response("Error\nBad Request!", 400)
 
-
             except Exception as ex:
                 print(ex)
 
@@ -685,12 +680,10 @@ table.Network.eth0.SubnetMask=255.255.248.0
                         else:
                             return handle_response("Error\nBad Request!", 400)
 
-
             except Exception as ex:
                 print(ex)
     
         ### ------------------------------- SnapManager -----------------------------
-
         class AsyncGeneratorResponse(StreamingResponse):
             def __init__(self, agen):
                 self.agen = agen
@@ -816,9 +809,12 @@ table.Network.eth0.SubnetMask=255.255.248.0
 
         try:
             ## WebServer innitialization...
-            trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
-            # uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init_file)
-            uvicorn.run(self.app, host=self.ip, port=self.port)
+            trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port} | FastAPI log is enabled: {self.log_init}")
+            if self.log_init:
+                uvicorn.run(self.app, host=self.ip, port=self.port, log_config='../../.log.ini')
+            else:
+                uvicorn.run(self.app, host=self.ip, port=self.port)
+
         except Exception as ex:
             report_exception(ex)
 

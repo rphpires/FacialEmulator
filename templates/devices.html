@@ -22,6 +22,7 @@
         <th scope="col" class="text-center">LocalControllerID</th>
         <th scope="col" class="text-center">Nome</th>
         <th scope="col" class="text-center">Port</th>
+        <th scope="col" class="text-center">Log</th>
         <th scope="col" class="text-center">Event Interval (s)</th>
         <th scope="col" class="text-center">Total Users</th>
         <th scope="col" class="text-center">Commands</th>
@@ -37,12 +38,21 @@
           <td class="text-center">{{ dev.lc_id }}</td>
           <td class="text-center">{{ dev.name }}</td>
           <td class="text-center" id="port_no">{{ dev.port }}</td>
+          <td class="text-center">
+            <input 
+              type="checkbox" 
+              class="log-checkbox" 
+              id="log_enabled_{{ dev.lc_id }}" 
+              {% if dev.log_enabled == 1 %}checked{% endif %}
+              {% if dev.status == 'running' %} disabled {% endif %}
+            />
+          </td>
           <td class="text-center">{{ dev.interval }}</td>
           <td class="text-center">{{ dev.total }}</td>
           <td class="text-center">
             <a href="#" 
               class="btn btn-outline-success btn-sm {% if dev.status == 'running' %}btn-custom-disabled{% endif %}"
-              onclick="startSingleEmulator('{{dev.port}}')">
+              onclick="startSingleEmulator('{{dev.port}}', document.getElementById('log_enabled_{{ dev.lc_id }}').checked)">
                 <i class="bi bi-play-fill"></i>
             </a>
             <a href="#" 
@@ -162,6 +172,7 @@
 
     // Função para obter IDs dos dispositivos selecionados
     function getSelectedDevices() {
+      console.log("getSelectedDevices")
       const selectedDevices = [];
       const deviceCheckboxes = document.querySelectorAll('input.device-checkbox');
 
@@ -188,14 +199,19 @@
     // Função chamada ao clicar em "Iniciar"
     window.start_emulators = async () => {
       const selectedDevices = getSelectedDevices();
-      if (selectedDevices.length > 0) {
+
+      console.log(selectedDevices)
+      const selectedDevicesLog = getSelectedDevicesLog();
+
+      console.log(selectedDevicesLog)
+      if (selectedDevices.length > 0 || selectedDevicesLog.length > 0) {
         try {
           const response = await fetch('/start', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ devices: selectedDevices }),
+            body: JSON.stringify({ devices: selectedDevices, enable_log: selectedDevicesLog }),
           });
 
           if (response.ok) {
@@ -242,13 +258,19 @@
     };
   });
 
-  function startSingleEmulator(port) {
+  function startSingleEmulator(port, isChecked) {
+    const enableLog = {};
+    enableLog[port] = isChecked;
+    
+    const body = JSON.stringify({ devices: [port], enable_log: enableLog })
+    console.log(`startSingleEmulator: body= ${body}`)
+    
     fetch('/start', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ devices: [port] }),
+      body: body,
     })
     .catch(error => {
       console.error(`Erro ao iniciar o emulador na porta ${port}:`, error);

@@ -191,7 +191,7 @@ class DatabaseHandler(Thread):
                 
             case 'service':
                 self.db_creation_string = SERVICE_DB_CREATION_STRING
-                self.test_query = "SELECT LocalControllerID FROM Main LIMIT 1;"
+                self.test_query = "SELECT LogEnabled FROM Main LIMIT 1;"
                 self.database_path = r'data/database.db'
                 
 
@@ -299,7 +299,8 @@ CREATE TABLE IF NOT EXISTS Main(
 [Type] INTEGER,
 [Status] TEXT,
 [EventInterval] INTEGER,
-[TotalUsers] INTEGER
+[TotalUsers] INTEGER,
+[LogEnabled] INTEGER
 );
 
 -- WXS Users to be Compared --

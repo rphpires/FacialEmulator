@@ -52,13 +52,14 @@
 
   <script>
     window.start_all_emulators = async () => {
+      const selectedDevicesLog = getSelectedDevicesLog();
       try {
         const response = await fetch('/start', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ devices: ["all"] }),  // Ajuste conforme necessário
+          body: JSON.stringify({ devices: ["all"], enable_log: selectedDevicesLog }),  // Ajuste conforme necessário
         });
       } catch (error) {
         console.error('Erro ao iniciar emuladores:', error);
@@ -80,5 +81,31 @@
       }
     };
 
+    // Função para obter IDs dos dispositivos selecionados para habilitar o Log
+    function getSelectedDevicesLog() {
+      console.log("getSelectedDevicesLog")
+      const devicesLog = {};
+      const deviceCheckboxes = document.querySelectorAll('input.log-checkbox');
+
+      deviceCheckboxes.forEach((checkbox) => {
+        const row = checkbox.closest('tr'); // Acessa a linha da tabela
+ 
+        if (row) {
+          // Encontre o elemento <td> com o ID 'port_no'
+          const portElement = row.querySelector('td#port_no');
+
+          if (portElement) {
+            // Pegue o valor do texto do <td>
+            const port = portElement.textContent.trim();
+
+            // Adicione o valor ao objeto devicesLog com base no estado do checkbox
+            devicesLog[port] = checkbox.checked;
+          }
+        }
+      });
+
+      return devicesLog;
+    }
+    
   </script>
 

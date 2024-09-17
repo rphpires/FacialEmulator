@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from typing import List, Dict, Optional, Any
 from fastapi_socketio import SocketManager
 
 from scripts.GlobalFunctions import *
@@ -64,7 +65,14 @@ class Service():
             print('Client disconnected')
 
         class Devices(BaseModel):
-            devices: list[str]
+            devices: List[str]
+
+        class EnableLog(BaseModel):
+            devices: Dict
+
+        class RequestBody(BaseModel):
+            devices: List[str]
+            enable_log: EnableLog
 
         @self.app.api_route("/", methods=["GET", "POST"], response_class=HTMLResponse)
         async def main_page(request: Request, page: int = 1, per_page: int = 10):
@@ -98,9 +106,11 @@ class Service():
             return self.templates.TemplateResponse('devices.html', context )
        
         @self.app.post("/start", response_class=HTMLResponse)
-        async def start_emulators(request: Request, devices: Devices):
+        async def start_emulators(request_body: Dict[Any, Any]):
             print('>>> Starting Emulators')
-            self.start_emulators(devices.devices)
+            
+            self.update_log_enabled(request_body["enable_log"])
+            self.start_emulators(request_body["devices"])
             return RedirectResponse(url="/")
 
         @self.app.post("/stop", response_class=HTMLResponse)
@@ -200,10 +210,10 @@ class Service():
         device_status_running = 0
 
         result = self.service_db.select(f"""
-select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventInterval, TotalUsers from Main;
+select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventInterval, TotalUsers, LogEnabled from Main;
 """)
         if result:
-            for lc_id, name, ip, port, model, status, enabled, interval, total in result:
+            for lc_id, name, ip, port, model, status, enabled, interval, total, log_enabled in result:
                 if status == 'running':
                     device_status_running += 1 
 
@@ -212,6 +222,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
                     "name": name,
                     "ip_address": ip,
                     "port": port,
+                    "log_enabled": int(log_enabled),
                     "model": model,
                     "status": status,
                     "enabled": enabled,
@@ -301,8 +312,8 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
                 )
             else:
                 self.service_db.execute(
-                    'INSERT INTO Main values (?,?,?,?,?,?,?,?,?,?)', 
-                    (key, wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], 'stopped', wxs_dev["interval"], 0)
+                    'INSERT INTO Main values (?,?,?,?,?,?,?,?,?,?,?)', 
+                    (key, wxs_dev["name"], wxs_dev["ip"], wxs_dev["port"], wxs_dev["model"], wxs_dev["enabled"], wxs_dev["type"], 'stopped', wxs_dev["interval"], 0, 0)
                 )
 
         for id in self.get_missing_keys(local_devices, wxs_controllers_dit):
@@ -315,6 +326,27 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         print('get controllers')
         get_lcs = requests.get(f"http://{self.api_server}")
         return False
+    
+    def update_log_enabled(self, devices):
+        try:
+            _enabled = []
+            _disabled = []
+
+            for port, value in devices.items():
+                if value:
+                    _enabled.append(port)
+                else:
+                    _disabled.append(port)
+
+            # _enabled_script = f"update Main set LogEnabled = 1 where port in ({', '.join(_enabled)})"
+            # _disable_script = f"update Main set LogEnabled = 0 where port in ({', '.join(_disabled)})"
+            if _enabled:
+                self.service_db.execute(f"update Main set LogEnabled = 1 where port in ({', '.join(_enabled)})")
+            if _disabled:
+                self.service_db.execute(f"update Main set LogEnabled = 0 where port in ({', '.join(_disabled)})")
+
+        except Exception as ex:
+            report_exception(ex)
 
     def check_emulator_path(self, port):
         try:
@@ -368,26 +400,26 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         trace(f'Starting emulators process: {devices}')
         try:
             processes = []
-            script = "select IPAddress, Port, Model, Enabled, EventInterval from Main where Enabled = 1"
+            script = "select IPAddress, Port, Model, Enabled, EventInterval, LogEnabled from Main where Enabled = 1"
             if 'all' in devices:
                 script += ";"
             else:
                 script += f" and Port in ({','.join(str(p) for p in devices)});"
 
-            trace(script)
+            # trace(script)
         
         except Exception as ex:
             report_exception(ex)
 
         read_lc_contents = self.service_db.select(script)
-        for ip, port, model, enabled, evt_interval in read_lc_contents:
+        for ip, port, model, enabled, evt_interval, log_enabled in read_lc_contents:
             try:
-                trace(f'-- Sending command: {ip}, {port}, {model}, {evt_interval}')
+                trace(f'-- Sending command: {ip}, {port}, {model}, {log_enabled}, {evt_interval}')
                 executavel, emulator_folder = self.check_emulator_path(port)
                 emulator_path = os.path.abspath(executavel)
                 try:
                     if executavel:
-                        args = [emulator_path, str(ip), str(port), model, str(evt_interval)]
+                        args = [emulator_path, str(ip), str(port), model, str(log_enabled), str(evt_interval)]
                         if self.get_pids_of_running_process(port) == ['']:
                             trace(f'## ARGS: {args}')
                             process = subprocess.Popen(
@@ -609,9 +641,9 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
 
     def format_device_template(self, device_id):
         try:
-            result = self.service_db.select(f"select Name, Port, EventInterval, Status, TotalUsers from Main where LocalControllerID = {device_id};")
+            result = self.service_db.select(f"select Name, Port, EventInterval, Status, TotalUsers, LogEnabled from Main where LocalControllerID = {device_id};")
             trace(f"format_device_template: {result}")
-            name, port, interval, status, total = result[0]
+            name, port, interval, status, total, log_enabled = result[0]
         except Exception as ex:
             report_exception(ex)
 
@@ -620,6 +652,8 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         _template = _template.replace("$port", str(port))
         _template = _template.replace("$interval", str(interval))
         _template = _template.replace("$total", str(total))
+        _template = _template.replace("$log_value", "checked" if log_enabled == 1 else "")
+        _template = _template.replace("$log_enabled", "disabled" if status == 'running' else "")
 
         if status == 'running':
             button_start = 'btn-custom-disabled'
@@ -747,6 +781,9 @@ device_template = """
 <td class="text-center">$lc_id</td>
 <td class="text-center">$name</td>
 <td class="text-center" id="port_no">$port</td>
+<td class="text-center">
+    <input type="checkbox" class="log-checkbox" id="log_enabled_$port" $log_value $log_enabled/>
+</td>
 <td class="text-center">$interval</td>
 <td class="text-center">$total</td>
 <td class="text-center">
@@ -762,7 +799,7 @@ device_template = """
 </a>
 </td>
 <td class="text-center">
-<input type="checkbox" class="device-checkbox" />
+    <input type="checkbox" class="device-checkbox" />
 </td>
 $statusObj
 </tr>
