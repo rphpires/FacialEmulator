@@ -61,7 +61,7 @@ def get_localtime():
     else:
         return datetime.datetime.today()
     
-tracer = Tracer()
+# tracer = Tracer()
 sql = DatabaseReader()
 
 # def innitialize_tracer(port):
@@ -71,30 +71,30 @@ sql = DatabaseReader()
 
 import datetime, traceback
 
-def trace(msg):
-    tracer.trace_message(remove_accents_from_string(msg))
+# def trace(msg):
+#     tracer.trace_message(remove_accents_from_string(msg))
 
 
-def trace_elapsed(msg, reference_utc_time):
-    delta = datetime.datetime.utcnow() - reference_utc_time
-    if not 'total_seconds' in dir(delta):
-        tracer.trace_message(msg)
-        return
-    elapsed_ms = int((delta).total_seconds() * 1000)
-    msg += " (%d ms)" % (elapsed_ms)
-    tracer.trace_message(msg)
+# def trace_elapsed(msg, reference_utc_time):
+#     delta = datetime.datetime.utcnow() - reference_utc_time
+#     if not 'total_seconds' in dir(delta):
+#         tracer.trace_message(msg)
+#         return
+#     elapsed_ms = int((delta).total_seconds() * 1000)
+#     msg += " (%d ms)" % (elapsed_ms)
+#     tracer.trace_message(msg)
 
 
-def info(msg):
-    tracer.trace_message(msg)
+# def info(msg):
+#     tracer.trace_message(msg)
 
 
-def error(msg):
-    tracer.trace_message("****" + msg)
-    x = get_localtime()
-    d = "%04d/%02d/%02d %02d:%02d:%02d.%06d " % (x.year, x.month, x.day, x.hour, x.minute, x.second, x.microsecond)
-    sys.stderr.write("ERROR" + d + msg + '\n')
-    sys.stdout.write("ERROR" + d + msg + '\n')
+# def error(msg):
+#     tracer.trace_message("****" + msg)
+#     x = get_localtime()
+#     d = "%04d/%02d/%02d %02d:%02d:%02d.%06d " % (x.year, x.month, x.day, x.hour, x.minute, x.second, x.microsecond)
+#     sys.stderr.write("ERROR" + d + msg + '\n')
+#     sys.stdout.write("ERROR" + d + msg + '\n')
 
 def format_date(x: datetime.datetime) -> str:
     if not x:
@@ -104,36 +104,36 @@ def format_date(x: datetime.datetime) -> str:
 
 ERROR_LOG_FILE = "TraceEmulator/ErrorLog.txt"
 
-tracer.check_error_log_file()
+# tracer.check_error_log_file()
 
-def report_exception(e, do_sleep=True):
-    x = get_localtime()
-    header = "\n\n************************************************************************\n"
-    header += "Exception date: %04d/%02d/%02d %02d:%02d:%02d.%06d \n" % (x.year, x.month, x.day, x.hour, x.minute, x.second, x.microsecond)
-    # header += f"Version {CONTROLLER_VERSION}\n"
-    header += "\n"
+# def report_exception(e, do_sleep=True):
+#     x = get_localtime()
+#     header = "\n\n************************************************************************\n"
+#     header += "Exception date: %04d/%02d/%02d %02d:%02d:%02d.%06d \n" % (x.year, x.month, x.day, x.hour, x.minute, x.second, x.microsecond)
+#     # header += f"Version {CONTROLLER_VERSION}\n"
+#     header += "\n"
 
-    sys.stdout.write(header)
-    sys.stderr.write(header)
-    traceback.print_exc(file=sys.stdout)
-    if is_windows():
-        f = open(ERROR_LOG_FILE, 'a')
-        f.write(header)
-        traceback.print_exc(file=f)
-        f.close()
-    else:
-        traceback.print_exc(file=sys.stderr)
+#     sys.stdout.write(header)
+#     sys.stderr.write(header)
+#     traceback.print_exc(file=sys.stdout)
+#     if is_windows():
+#         f = open(ERROR_LOG_FILE, 'a')
+#         f.write(header)
+#         traceback.print_exc(file=f)
+#         f.close()
+#     else:
+#         traceback.print_exc(file=sys.stderr)
 
-    try:
-        t = "{}".format(type(threading.currentThread())).split("'")[1].split('.')[1]
-    except IndexError:
-        t = 'UNKNOWN'
+#     try:
+#         t = "{}".format(type(threading.currentThread())).split("'")[1].split('.')[1]
+#     except IndexError:
+#         t = 'UNKNOWN'
 
-    error("Bypassing exception at %s (%s)" % (t, e))
-    error("**** Exception: <code>%s</code>" % (traceback.format_exc(), ))
-    if do_sleep:
-        error("Sleeping 2 seconds")
-        time.sleep(2.0)
+#     error("Bypassing exception at %s (%s)" % (t, e))
+#     error("**** Exception: <code>%s</code>" % (traceback.format_exc(), ))
+#     if do_sleep:
+#         error("Sleeping 2 seconds")
+#         time.sleep(2.0)
 
 
 def generate_mac_address():

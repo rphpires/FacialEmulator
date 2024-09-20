@@ -522,7 +522,7 @@ class DahuaEmulator(threading.Thread):
 
         ## Custom endpoint to check emulator status
         @self.app.get('/emulator/get-status')
-        def get_device_status(request: Request): ## Async
+        async def get_device_status(request: Request): ## Async
             try:
                 trace("/emulator/get-status: connect")
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

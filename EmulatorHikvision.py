@@ -6,6 +6,7 @@ import requests
 import base64
 import xmltodict
 import schedule
+import time
 
 from fastapi import FastAPI, Response, WebSocket, Request, Body, Query, UploadFile, File, Form, APIRouter
 from fastapi.responses import JSONResponse
@@ -549,17 +550,14 @@ class HikvisionEmulator(threading.Thread):
             return response  
         
         @staticmethod 
-        # def default_response(status_code, status_string, sub_status_code, error_code = None, error_msg= None):
         def default_response(response_code=200, **kwargs):
-            ## "statusCode": 6, "statusString": "Invalid Content", "subStatusCode": "employeeNoAlreadyExist", "errorCode": 1610637344, "errorMsg": "checkUser"           }
             ret = {key: value for key, value in kwargs.items() if value is not None}
             return Response(content=json.dumps(ret, indent=2), status_code=response_code, media_type="application/json")
-            #return JSONResponse(content=json.dumps(ret, indent=2), status_code=response_code, media_type="application/json")
-
+            
 
         ## Custom endpoint to check emulator status
         @self.app.get('/emulator/get-status')
-        def get_device_status(request: Request):
+        async def get_device_status(request: Request):
             try:
                 trace("/emulator/get-status: connect")
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

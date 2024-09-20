@@ -100,7 +100,7 @@ class DatabaseReader:
 
         return result
 
-    def execute_update(self, query):
+    def execute(self, query):
         return self._execute_query(query)
 
     def execute_insert(self, query):

@@ -13,6 +13,7 @@ import uvicorn
 
 from scripts.DatabaseHandler import DatabaseHandler
 from scripts.GlobalFunctions import *
+from scripts.Tracer import *
 
 from EmulatorDahua import DahuaEmulator, dahua_still_running_trace_main
 from EmulatorHikvision import HikvisionEmulator, hik_still_running_trace_main

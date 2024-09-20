@@ -34,7 +34,7 @@ def is_admin():
     except:
         return False
     
-
+trace('Starting Service')
 ## Teste new repository
 class Service():
     ...
@@ -319,7 +319,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         for id in self.get_missing_keys(local_devices, wxs_controllers_dit):
             self.service_db.execute(f'delete from Main where LocalControllerID= {id};')
 
-        print(wxs_controllers_dit)
+        # print(wxs_controllers_dit)
         self.init_devices()
 
     def get_wxs_local_controllers(self):
@@ -338,8 +338,6 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
                 else:
                     _disabled.append(port)
 
-            # _enabled_script = f"update Main set LogEnabled = 1 where port in ({', '.join(_enabled)})"
-            # _disable_script = f"update Main set LogEnabled = 0 where port in ({', '.join(_disabled)})"
             if _enabled:
                 self.service_db.execute(f"update Main set LogEnabled = 1 where port in ({', '.join(_enabled)})")
             if _disabled:
@@ -394,7 +392,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
             try:
                 stdout, stderr = process.communicate()
                 time.sleep(0.2)
-                
+
             except Exception as ex:
                 report_exception(ex)
 
@@ -556,7 +554,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
             return False
 
     async def update_device_status(self, device_id: int, status: str):
-        trace(f'------ Gerando update para o controlador: {device_id}')
+        # trace(f'Gerando update para o controlador: {device_id} na interface.')
         await self.sio.emit(
             'update_device_status', 
             {
@@ -567,6 +565,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         )
 
     async def refresh_device_status(self):
+        trace('Get devices current status.')
         devices, _ = self.get_current_devices()
         for dev in devices:
             try:
@@ -575,18 +574,21 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
                     self.update_total_users(dev, ret["TotalUsers"])
                     self.devices_watchdog[dev['port']] = 0
                     if dev["status"] != "running":
+                        trace(f"Device Status Changed: Port={dev['port']}, Name={dev['name']} - Now its running", color="MediumSeaGreen")
                         self.service_db.execute(f"update Main set status = 'running' where LocalControllerID = {dev['lc_id']};")
                         await self.update_device_status(dev["lc_id"], 'running')
                     continue
                 else:
                     self.emulator_watchdog(dev)
                     if dev["status"] != "stopped":
+                        trace(f"Device Status Changed: Port={dev['port']}, Name={dev['name']} - Now its stopped", color="Salmon")
                         self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {dev['lc_id']};")
                         await self.update_device_status(dev["lc_id"], 'running')
 
             except requests.exceptions.RequestException  as ex:
                 self.emulator_watchdog(dev)
                 if dev["status"] != "stopped":
+                    trace(f"Device Status Changed: Port={dev['port']}, Name={dev['name']} - Now its stopped", color="Salmon")
                     self.service_db.execute(f"update Main set status = 'stopped' where LocalControllerID = {dev['lc_id']};")
                     await self.update_device_status(dev["lc_id"], 'running')
 
@@ -595,7 +597,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
             pgrep_cmd = f"ps aux | grep 'facial_emulator_{device_port}' | grep -v grep | awk '{{print $2}}'"
             result = subprocess.run(pgrep_cmd, shell=True, check=True, stdout=subprocess.PIPE, text=True)
             _r = result.stdout.strip().split('\n')
-            trace(f"get_pids_of_running_process.port = {device_port} | return: {_r}.")
+            # trace(f"get_pids_of_running_process.port = {device_port} | return: {_r}.")
             return _r
         
         except Exception as ex:
@@ -644,7 +646,7 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
     def format_device_template(self, device_id):
         try:
             result = self.service_db.select(f"select Name, Port, EventInterval, Status, TotalUsers, LogEnabled from Main where LocalControllerID = {device_id};")
-            trace(f"format_device_template: {result}")
+            # trace(f"format_device_template: {result}")
             name, port, interval, status, total, log_enabled = result[0]
         except Exception as ex:
             report_exception(ex)

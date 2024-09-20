@@ -10,3 +10,4 @@ database.db
 wxs_scripts/build
 wxs_scripts/dist
 .env
+Traces

@@ -46,6 +46,7 @@ AND m.CHID in (select CHID from CHCards where IPRdrUserID is not null)
         except Exception as ex:
             print(f'*** Exception: {ex}')
 
+
 def remove_access_levels(total_users, access_level_id):
     script = f"""
 With RemoveAC as (
@@ -110,10 +111,70 @@ def end_visits(total_users):
 
     i = len(ret)
     for chid, name in ret:
-        reply = requests.delete(api.url + f"cardholders/{chid}/activeVisit", headers=h, params=(("CallAction", False),))
-        print(f"{i} - Encerrando a visita do usuário: CHID={chid}, Nome={name} | StatusCode: [{reply.status_code}] {reply.reason}")
+        try:
+            reply = requests.delete(api.url + f"cardholders/{chid}/activeVisit", headers=h, params=(("CallAction", False),))
+            print(f"{i} - Encerrando a visita do usuário: CHID={chid}, Nome={name} | StatusCode: [{reply.status_code}] {reply.reason}")
+            i -= 1
+        except Exception as ex:
+            print(ex)
 
 
+def sql_update_user_loop(total_users):
+    time_interval = float(input("\n> Defina o intervalo de tempo entre os updates (segundos): "))
+
+    script = f"""
+Select
+    TOP {total_users}
+    m.CHID,
+    FirstName
+FROM CHMain m
+    JOIN CHAUX a ON a.CHID = m.CHID and AuxChk03 = 1
+WHERE m.CHID in (select CHID from CHCards where IPRdrUserID is not null)
+"""
+    get_chids = sql.read_data(script)
+
+    while True:
+        print('> Novo loop de update de usuários.')
+        for chid, name in get_chids:
+            print(f'Desassociando nível de acesso do usuário, CHID= {chid}, Nome= {name}')
+            sql.execute(f"delete from CHAccessLevels where chid = {chid}")
+            sql.execute(f"update CHMain set CHDownloadRequired = 1 where chid = {chid}")
+            sleep(time_interval)
+
+        for chid, name in get_chids:
+            print(f'Associando nível de acesso do usuário, CHID= {chid}, Nome= {name}')
+            sql.execute(f"insert into CHAccessLevels values({chid}, 1, null, null)")
+            sql.execute(f"update CHMain set CHDownloadRequired = 1 where chid = {chid}")
+            sleep(time_interval)
+
+
+def sql_assign_access_level(total_users, access_level_id):
+    script = f"""
+Select
+    TOP {total_users}
+    m.CHID,
+    FirstName
+FROM CHMain m
+    JOIN CHAUX a ON a.CHID = m.CHID and AuxChk03 = 1
+WHERE m.CHID in (select CHID from CHCards where IPRdrUserID is not null)
+"""
+    if not (get_chids := sql.read_data(script)):
+        print("Nenhum usuário disponível")
+        return
+    
+    insert_script = ""
+
+    for chid, name in get_chids:
+        try:
+            insert_script += f"INSERT INTO CHAccessLevels values({chid}, {access_level_id}, null, null);\n"
+        except Exception as ex:
+            print(f"** Erro: {ex}")
+
+    print(f'Inserting {total_users} lines.')
+    sql.execute(insert_script)
+
+## ---------------------------
+## ---------------------------
 def get_access_level_id():
     ret = sql.read_data("select AccessLevelID, AccessLevelName from CfgACAccessLevels")
     if not ret:
@@ -155,17 +216,19 @@ def get_total_users_to_assing():
 def select_operation():
     while True:
         user_input = input(f"""
-{Fore.BLUE}Selecione a operação que deseja realizar:{Style.RESET_ALL}
-    1 - Associar nível de acesso em lote (apenas para residentes);
-    2 - Desassociar nível de acesso em lote (apenas para residentes);
-    3 - Liberar visitas em lote;
-    4 - Encerrar visitas em lote;
+{Fore.GREEN}Selecione a operação que deseja realizar:{Style.RESET_ALL}
+    1 - [API] Associar nível de acesso em lote (apenas para residentes);
+    2 - [API] Desassociar nível de acesso em lote (apenas para residentes);
+    3 - [API] Liberar visitas em lote;
+    4 - [API] Encerrar visitas em lote;
+    5 - [SQL] Loop de update de usuários;
+    6 - [SQL] Associar nível de acesso em lote
 
 {Fore.BLUE}Digite o número da opção:{Style.RESET_ALL} """)
         try:
             value = int(user_input)
 
-            if 0 < value <= 4:
+            if 0 < value <= 6:
                 # print(f"Você digitou: {value}")
                 return value
             else:
@@ -191,6 +254,13 @@ while True:
             start_visits(total_users, access_level_id)
         case 4:
             end_visits(total_users)
+
+        case 5:
+            sql_update_user_loop(total_users)
+
+        case 6:
+            access_level_id = get_access_level_id()
+            sql_assign_access_level(total_users, access_level_id)
 
         case _:
             print(f'{Fore.RED}Operação inválida!{Style.RESET_ALL}')
