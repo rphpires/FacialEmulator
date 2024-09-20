@@ -7,7 +7,7 @@ import base64
 import xmltodict
 import schedule
 
-from fastapi import FastAPI, Response, WebSocket, Request, Body, Query, UploadFile, File, Form
+from fastapi import FastAPI, Response, WebSocket, Request, Body, Query, UploadFile, File, Form, APIRouter
 from fastapi.responses import JSONResponse
 from starlette.responses import PlainTextResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 
 from scripts.GlobalFunctions import *
 from scripts.FakeEventImage import photo_img
+
 
 class HikvisionHandler():
     def __init__(self, db_handler) -> None:
@@ -108,9 +109,9 @@ SELECT
             for employee in employee_list:
                 try:
                     trace(f"Deleting user with EmployeeNo= {employee['employeeNo']}")
-                    self.db_handler.execute(f"Delete from HikvisionUser where employeeNo= {employee['employeeNo']};")
-                    self.db_handler.execute(f"Delete from HikvisionCard where employeeNo= {employee['employeeNo']};")
-                    self.db_handler.execute(f"Delete from HikvisionFace where UserID= {employee['employeeNo']};")
+                    self.db_handler.execute(f"Delete from HikvisionUser where employeeNo= {employee['employeeNo']};", commit=False)
+                    self.db_handler.execute(f"Delete from HikvisionCard where employeeNo= {employee['employeeNo']};", commit=False)
+                    self.db_handler.execute(f"Delete from HikvisionFace where UserID= {employee['employeeNo']};", commit=False)
                     self.db_handler.execute(f"Delete from HikvisionFinger where CHID= {employee['employeeNo']};")
 
                 except Exception as ex:
@@ -516,6 +517,8 @@ class AcsCfg(BaseModel):
     remoteCheckDoorEnabled: bool
     checkChannelType: str | None = ""
 
+
+# @cbv(router)
 class HikvisionEmulator(threading.Thread):
     def __init__(self, ip, port, db_handler, event_freq, log_init_file) -> None:
         threading.Thread.__init__(self)
@@ -527,18 +530,14 @@ class HikvisionEmulator(threading.Thread):
         
         self.hikvision = HikvisionHandler(db_handler)
         self.app = FastAPI()
-        active_connections = set()
-
+        
         self.generated_event_frequency = event_freq
         self.generated_event = True if event_freq >= 1 else False
         self.local_authentication_value = '1'
 
         self.mac_address = generate_mac_address()
-        self.remote_server = self.hikvision.get_settings("RemoteServer") 
-        self.remote_port = self.hikvision.get_settings("RemotePort") 
-        self.remote_server_url = f'http://{self.remote_server}:{self.remote_port}'
-        trace(f'Starting server URL from database: {self.remote_server_url}')
-
+        self.read_settings()
+        
 
         @staticmethod 
         def handle_response(content, response_code = 200, latency_sleep=50):
@@ -560,7 +559,7 @@ class HikvisionEmulator(threading.Thread):
 
         ## Custom endpoint to check emulator status
         @self.app.get('/emulator/get-status')
-        async def get_device_status(request: Request):
+        def get_device_status(request: Request):
             try:
                 trace("/emulator/get-status: connect")
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -602,7 +601,7 @@ class HikvisionEmulator(threading.Thread):
             }
 
         @self.app.put(ac_url + "/AcsCfg") ## Set Online/Local Authentication
-        async def put_acs_cgf(payload: dict):
+        def put_acs_cgf(payload: dict):
             try:
                 body = payload["AcsCfg"]
                 trace(f'Setting online mode: {body["remoteCheckDoorEnabled"]}')
@@ -629,7 +628,8 @@ class HikvisionEmulator(threading.Thread):
 
         @self.app.put(ac_url + "/Door/param/1") ## TODO: Test
         async def set_door_parameters():
-            xml_response_content = """
+            try:
+                xml_response_content = """
 <?xml version="1.0" encoding="UTF-8"?>
 <ResponseStatus version="1.0" xmlns="http://www.hikvision.com/ver10/XMLSchema">
     <requestURL></requestURL>
@@ -638,116 +638,169 @@ class HikvisionEmulator(threading.Thread):
     <subStatusCode>ok</subStatusCode>
 </ResponseStatus>
 """
-            return Response(content=xml_response_content, media_type="application/xml")
+                return Response(content=xml_response_content, media_type="application/xml")
 
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+        
         @self.app.put(ac_url + "/RemoteControl/door/{output_id}") ## TODO: Check 422 Unprocessable Entity
         async def command_door(output_id: int, item: dict):
-            trace(f'New command received to output= {output_id}')
-            xml_response_content = """
-<?xml version="1.0" encoding="UTF-8"?>
-<ResponseStatus version="1.0" xmlns="http://www.hikvision.com/ver10/XMLSchema">
-    <requestURL></requestURL>
-    <statusCode>1</statusCode>
-    <statusString>OK</statusString>
-    <subStatusCode>ok</subStatusCode>
-</ResponseStatus>
-"""
-            return Response(content=xml_response_content, media_type="application/xml")
-
+            try:
+                trace(f'New command received to output= {output_id}')
+                xml_response_content = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <ResponseStatus version="1.0" xmlns="http://www.hikvision.com/ver10/XMLSchema">
+        <requestURL></requestURL>
+        <statusCode>1</statusCode>
+        <statusString>OK</statusString>
+        <subStatusCode>ok</subStatusCode>
+    </ResponseStatus>
+    """
+                return Response(content=xml_response_content, media_type="application/xml")
+        
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+        
         ## ---- UserInfo ----
         @self.app.get(ac_url + "/UserInfo/Count") ## OK
-        async def get_user_count():
-            users_count, cards_count, faces_count, fingerprints_count = self.hikvision.count_items()
-            return {
-                "UserInfoCount": {
-                    "userNumber": int(users_count),
-                    "bindFaceUserNumber": int(faces_count),
-                    "bindFingerprintUserNumber": int(fingerprints_count),
-                    "bindCardUserNumber": int(cards_count),
-                    "bindRemoteControlNumber": 0
+        def get_user_count():
+            try:
+                users_count, cards_count, faces_count, fingerprints_count = self.hikvision.count_items()
+                return {
+                    "UserInfoCount": {
+                        "userNumber": int(users_count),
+                        "bindFaceUserNumber": int(faces_count),
+                        "bindFingerprintUserNumber": int(fingerprints_count),
+                        "bindCardUserNumber": int(cards_count),
+                        "bindRemoteControlNumber": 0
+                    }
                 }
-            }
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
         
         @self.app.post(ac_url + "/UserInfo/Search") ## TODO: Test
-        async def post_user_search(user_info: dict):
-            cond = user_info["UserInfoSearchCond"]
-            return self.hikvision.get_remote_users(cond["maxResults"], cond["searchResultPosition"])
-        
-        @self.app.post(ac_url + "/UserInfo/Record") ## OK
-        async def post_user_record(user: dict):
-            ret_status = self.hikvision.add_user(user["UserInfo"])
+        def post_user_search(user_info: dict):
+            try:
+                cond = user_info["UserInfoSearchCond"]
+                return self.hikvision.get_remote_users(cond["maxResults"], cond["searchResultPosition"])
+            
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
 
-            match ret_status:
-                case 1: ## OK
-                    return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
-                
-                case 6: ## employeeNoAlreadyExist
-                    return default_response(
-                        statusCode=6, 
-                        response_code=400, 
-                        statusString="Invalid Content", 
-                        subStatusCode="employeeNoAlreadyExist", 
-                        errorCode= 1610637344, 
-                        errorMsg="checkUser"
-                    ) 
+        @self.app.post(ac_url + "/UserInfo/Record") ## OK
+        def post_user_record(user: dict):
+            try:
+                ret_status = self.hikvision.add_user(user["UserInfo"])
+
+                match ret_status:
+                    case 1: ## OK
+                        return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
+                    
+                    case 6: ## employeeNoAlreadyExist
+                        return default_response(
+                            statusCode=6, 
+                            response_code=400, 
+                            statusString="Invalid Content", 
+                            subStatusCode="employeeNoAlreadyExist", 
+                            errorCode= 1610637344, 
+                            errorMsg="checkUser"
+                        ) 
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
                     
         @self.app.put(ac_url + "/UserInfo/Modify") ## TODO: Test
         async def put_user_modify(user: dict):
-            self.hikvision.update_user(user["UserInfo"])
+            try:
+                self.hikvision.update_user(user["UserInfo"])
 
-            return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
-        
+                return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
+            
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+
         ## ---- UserInfoDetail ----
         @self.app.get(ac_url + "/UserInfoDetail/DeleteProcess") ## TODO: Test
-        async def get_user_delete_process():
-            # asyncio.sleep(0.01)
-            if not self.hikvision.delete_in_progress:
-                status = "success"
-            else:
-                status = "inProgress" ## TODO: Check correct reply message
-                
-            return {"UserInfoDetailDeleteProcess": {"status": status}}      
+        def get_user_delete_process():
+            try:
+                if not self.hikvision.delete_in_progress:
+                    status = "success"
+                else:
+                    status = "inProgress" ## TODO: Check correct reply message
+                    
+                return {"UserInfoDetailDeleteProcess": {"status": status}}      
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
 
         @self.app.put(ac_url + "/UserInfoDetail/Delete") ## TODO: Test
-        async def put_user_delete(user: dict):
-            user_to_delete = user["UserInfoDetail"]
-            match user_to_delete["mode"]:
-                case "byEmployeeNo":
-                    self.hikvision.delete_user(user_to_delete["EmployeeNoList"])
-                    return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
-                case _:
-                    return default_response(statusCode=77, statusString="Error", subStatusCode="Emulator Invalid Mode")
+        def put_user_delete(user: dict):
+            try:
+                user_to_delete = user["UserInfoDetail"]
+                match user_to_delete["mode"]:
+                    case "byEmployeeNo":
+                        self.hikvision.delete_user(user_to_delete["EmployeeNoList"])
+                        return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
+                    case _:
+                        return default_response(statusCode=77, statusString="Error", subStatusCode="Emulator Invalid Mode")
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
 
         ## ---- CardInfo ----
         @self.app.get(ac_url + "/CardInfo/Count") ## TODO: Test
-        async def get_card_count():
-            _, cards_count, _, _ = self.hikvision.count_items()
-            return {"CardInfoCount": {"cardNumber": int(cards_count)}}
-        
-        @self.app.post(ac_url + "/CardInfo/Search") ## TODO: Test
-        async def post_card_search(item: dict):
-            cond = item["CardInfoSearchCond"]
-            return self.hikvision.get_remote_cards(cond["maxResults"], cond["searchResultPosition"])
+        def get_card_count():
+            try:
+                _, cards_count, _, _ = self.hikvision.count_items()
+                return {"CardInfoCount": {"cardNumber": int(cards_count)}}
 
-        @self.app.post(ac_url + "/CardInfo/Record") ## TODO: Test
-        async def post_card_record(card: dict):
-            card_info = card["CardInfo"]
-            trace(f'[POST] /CardInfo/Record: content= {card_info}')
-            status_code = self.hikvision.add_card(card_info["employeeNo"], card_info["cardNo"])
-            match status_code:
-                case 1:
-                    return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
-                case 6:
-                    return default_response(
-                        statusCode=6, 
-                        response_code=400, 
-                        statusString="Invalid Content", 
-                        subStatusCode="cardNoAlreadyExist", 
-                        errorCode= 1610637363, 
-                        errorMsg="checkEmployeeNo"
-                    )
-                case _:
-                    return default_response(status_code=77, statusString="Error", subStatusCode="Emulator Invalid Content")
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+
+        @self.app.post(ac_url + "/CardInfo/Search")
+        def post_card_search(item: dict):
+            try:
+                cond = item["CardInfoSearchCond"]
+                return self.hikvision.get_remote_cards(cond["maxResults"], cond["searchResultPosition"])
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+
+        @self.app.post(ac_url + "/CardInfo/Record")
+        def post_card_record(card: dict):
+            try:
+                card_info = card["CardInfo"]
+                trace(f'[POST] /CardInfo/Record: content= {card_info}')
+                status_code = self.hikvision.add_card(card_info["employeeNo"], card_info["cardNo"])
+                match status_code:
+                    case 1:
+                        return default_response(statusCode=1, statusString="OK", subStatusCode="ok")
+                    case 6:
+                        return default_response(
+                            statusCode=6, 
+                            response_code=400, 
+                            statusString="Invalid Content", 
+                            subStatusCode="cardNoAlreadyExist", 
+                            errorCode= 1610637363, 
+                            errorMsg="checkEmployeeNo"
+                        )
+                    case _:
+                        return default_response(status_code=77, statusString="Error", subStatusCode="Emulator Invalid Content")
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
 
         # @self.app.put(ac_url + "/CardInfo/Delete")
         # async def put_card_record(card: dict):
@@ -764,25 +817,30 @@ class HikvisionEmulator(threading.Thread):
             return "GetAcsCfg"
         
         @self.app.post(ac_url + "/FingerPrintUploadAll") ## TODO: Implement Function
-        async def post_fingerprint_uploader():
-            _, _, _, fp_count = self.hikvision.count_items()
-            return {
-                "statusCode":	1,
-                "statusString":	"OK",
-                "subStatusCode":	"ok",
-                "FDRecordDataInfo":	[{
-                        "FDID":	"1",
-                        "faceLibType":	"blackFD",
-                        "name":	"",
-                        "recordDataNumber":	int(fp_count)
-                    }, {
-                        "FDID":	"2",
-                        "faceLibType":	"infraredFD",
-                        "name":	"",
-                        "recordDataNumber":	0
-                    }]
-            }
-            return "GetAcsCfg"
+        def post_fingerprint_uploader():
+            try:
+                _, _, _, fp_count = self.hikvision.count_items()
+                return {
+                    "statusCode":	1,
+                    "statusString":	"OK",
+                    "subStatusCode":	"ok",
+                    "FDRecordDataInfo":	[{
+                            "FDID":	"1",
+                            "faceLibType":	"blackFD",
+                            "name":	"",
+                            "recordDataNumber":	int(fp_count)
+                        }, {
+                            "FDID":	"2",
+                            "faceLibType":	"infraredFD",
+                            "name":	"",
+                            "recordDataNumber":	0
+                        }]
+                }
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+
        
         ## ---------------------------------------------------------------
         ## ------------------------- Intelligent -------------------------
@@ -790,35 +848,49 @@ class HikvisionEmulator(threading.Thread):
         intelli_url = "/ISAPI/Intelligent/FDLib"
 
         @self.app.get(intelli_url + "/Count") ## TODO: Test
-        async def get_fdlib_count():
-            _, _, faces_count, _ = self.hikvision.count_items()
-            return {
-                "statusCode":	1,
-                "statusString":	"OK",
-                "subStatusCode":	"ok",
-                "FDRecordDataInfo":	[{
-                        "FDID":	"1",
-                        "faceLibType":	"blackFD",
-                        "name":	"",
-                        "recordDataNumber":	int(faces_count)
-                    }, {
-                        "FDID":	"2",
-                        "faceLibType":	"infraredFD",
-                        "name":	"",
-                        "recordDataNumber":	0
-                    }]
-            }
-        
-        @self.app.post(intelli_url + "/FDSearch") ## TODO: Implement Function
-        async def post_fingerprint_search(face_info: dict):
-            return self.hikvision.get_remote_faces(face_info["maxResults"], face_info["searchResultPosition"], f"http://{self.ip}:{self.port}/LOCALS/pic/enrlFace")
+        def get_fdlib_count():
+            try:
+                _, _, faces_count, _ = self.hikvision.count_items()
+                return {
+                    "statusCode":	1,
+                    "statusString":	"OK",
+                    "subStatusCode":	"ok",
+                    "FDRecordDataInfo":	[{
+                            "FDID":	"1",
+                            "faceLibType":	"blackFD",
+                            "name":	"",
+                            "recordDataNumber":	int(faces_count)
+                        }, {
+                            "FDID":	"2",
+                            "faceLibType":	"infraredFD",
+                            "name":	"",
+                            "recordDataNumber":	0
+                        }]
+                }
+            
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+
+        @self.app.post(intelli_url + "/FDSearch")
+        def post_fingerprint_search(face_info: dict):
+            try:
+                return self.hikvision.get_remote_faces(face_info["maxResults"], face_info["searchResultPosition"], f"http://{self.ip}:{self.port}/LOCALS/pic/enrlFace")
+
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
 
         @self.app.get(intelli_url + "/LOCALS/pic/enrlFace/{user_id}")
-        async def get_remote_face(user_id: str):
-            return self.hikvision.get_face(user_id)
-            
-        @self.app.put(intelli_url + "/FDSearch/Delete") ## TODO: Test
-        async def put_fingerprint_uploader(item: dict):
+        def get_remote_face(user_id: str):
+            try:
+                return self.hikvision.get_face(user_id)
+            except Exception as ex:
+                report_exception(ex)
+                return Response(content=ex, status_code=500, media_type="application/xml")
+
+        @self.app.put(intelli_url + "/FDSearch/Delete")
+        def put_fingerprint_uploader(item: dict):
             try:
                 self.hikvision.delete_face(item["FPID"][0]["value"])
                 return "OK"
@@ -828,12 +900,13 @@ class HikvisionEmulator(threading.Thread):
                 return default_response(status_code=77, statusString="Error", subStatusCode="Emulator Invalid Content")
 
         @self.app.post(intelli_url + "/FaceDataRecord") ## TODO: Test
-        async def upload_face_data(FaceDataRecord: str = Form(...), FaceImage: UploadFile = File(...)):
+        def upload_face_data(FaceDataRecord: str = Form(...), FaceImage: UploadFile = File(...)):
             try:
                 face_data = json.loads(FaceDataRecord)
                 trace(f"Face Data Record: {face_data}")
 
-                image_data = await FaceImage.read()
+                # image_data = FaceImage.read()
+                image_data = FaceImage.file.read()
                 base64_image = base64.b64encode(image_data).decode()
 
                 ret = self.hikvision.add_face(face_data["FPID"], base64_image)
@@ -857,12 +930,12 @@ class HikvisionEmulator(threading.Thread):
                 report_exception(ex)
 
         @self.app.put(intelli_url + "/FDSetUp") ## TODO: Test
-        async def upload_face_data(FaceDataRecord: str = Form(...), FaceImage: UploadFile = File(...)):
+        def upload_face_data(FaceDataRecord: str = Form(...), FaceImage: UploadFile = File(...)):
             try:
                 face_data = json.loads(FaceDataRecord)
                 trace(f"Face Data Record: {face_data}")
 
-                image_data = await FaceImage.read()
+                image_data = FaceImage.file.read()
                 base64_image = base64.b64encode(image_data).decode()
 
                 ret = self.hikvision.update_face(face_data["FPID"], base64_image)
@@ -931,7 +1004,7 @@ class HikvisionEmulator(threading.Thread):
         @self.app.put(system_url + "/IO/outputs/{output_id}/trigger") ## TODO: Implement Function
         async def command_output(output_id: int, item: dict):
             trace(f'Receiving command: ')
-            return
+            return "OK"
 
         ## ---------------------------------------------------------------
         ## --------------------------- Events ----------------------------
@@ -939,6 +1012,7 @@ class HikvisionEmulator(threading.Thread):
         event_url = "/ISAPI/Event/notification"
 
         @self.app.get(event_url + "/httpHosts")
+        # @router.get(event_url + "/httpHosts")
         async def get_device_info():
             trace('Getting Info httpHosts')
             xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -992,6 +1066,12 @@ class HikvisionEmulator(threading.Thread):
                     yield chunk    
 
     
+    def read_settings(self):
+        self.remote_server = self.hikvision.get_settings("RemoteServer") 
+        self.remote_port = self.hikvision.get_settings("RemotePort") 
+        self.remote_server_url = f'http://{self.remote_server}:{self.remote_port}'
+        trace(f'Starting server URL from database: {self.remote_server_url}')
+
     async def generate_heartbeat(self):
         heartbeat_counter = time.time()
         self.genereted_event_counter = time.time()
@@ -1081,7 +1161,8 @@ Content-Length: {len(content_length)}\r
 
     def scheduler(self):
         # schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
-        schedule.every(5).minutes.do(still_running_trace)
+        # schedule.every(5).minutes.do(hik_still_running_trace_class)
+        schedule.every(5).seconds.do(hik_still_running_trace_class, class_em=self)
 
         while True:
             schedule.run_pending()   
@@ -1096,16 +1177,42 @@ Content-Length: {len(content_length)}\r
         ## WebServer innitialization...
         trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port}")
         if self.log_init:
-            uvicorn.run(self.app, host=self.ip, port=self.port, log_config='../../.log.ini')
+            uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init)
         else:
             uvicorn.run(self.app, host=self.ip, port=self.port)
 
-        
-def still_running_trace():
-    trace('Emulator is still running')
+    def run_server(self):
+        try:
+            app = FastAPI()
+            uvicorn.run("EmulatorHikvision:app", host=self.ip, port=self.port, workers=2)
+
+        except Exception as ex:
+            report_exception(ex)
+
+# app.include_router(router)
+
+
+def hik_still_running_trace_class(class_em):
+    trace(f'HikvisionEmulator: Emulator is still running | {class_em.mac_address} | {class_em.app.version} | {class_em.is_alive()}')
+
+def hik_still_running_trace_main():
+    while True:
+        trace('Main: Emulator is still running')
+        time.sleep(5)
 
 
 if __name__ == "__main__":
-    port=8000
-    d = HikvisionEmulator(port)
-    uvicorn.run(d.app, host="192.168.0.81", port=port)
+    from scripts.DatabaseHandler import DatabaseHandler
+
+    db_handler = DatabaseHandler('emulator')
+    db_handler.start()
+
+    ip = '172.23.13.159'
+    port = 8036
+    device_type = 'Hikvision'
+    log_init_file = ".log.ini"
+    event_freq = 10 ## Seconds
+    
+    trace('[DEBUG] Starting DahuaEMulator')
+    d = HikvisionEmulator(ip, port, db_handler, event_freq, log_init_file)
+    d.start()

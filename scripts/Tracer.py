@@ -2,6 +2,7 @@ import os
 import sys
 import threading
 import time
+import queue
 
 import scripts.GlobalFunctions as GlobalFunctions
 
@@ -114,6 +115,8 @@ class Tracer:
         self.html_trace = True
         self.screen_trace = True
         self.trace_lock = threading.Condition()
+        self.trace_queue = queue.Queue()
+        self.stop_event = threading.Event()
 
         self.error_to_file = True
         self.last_flush = 0
@@ -131,6 +134,10 @@ class Tracer:
 
         if os.getenv('ENABLE_TRACE'):
             self.screen_trace = True
+
+        # Inicia um thread para processar logs
+        self.log_thread = threading.Thread(target=self.process_log_queue, daemon=True)
+        self.log_thread.start()
 
     def set_screen_trace(self, value):
         self.screen_trace = value
@@ -212,6 +219,17 @@ class Tracer:
             cmd += "/bin/rm -f TraceEmulator/ErrorLog_*.txt.gz.tmp 2> /dev/null; "
             cmd += "} &"
             os.system(cmd)
+
+    def process_log_queue(self):
+        """Thread dedicada para processar as mensagens da fila."""
+        while not self.stop_event.is_set():
+            try:
+                msg, color_name, fd = self.trace_queue.get(timeout=1)  # Aguarda até 1 segundo por uma nova mensagem
+                # Processa o log
+                self.trace_to_html(msg, color_name, fd)
+                self.trace_queue.task_done()  # Indica que o processamento foi concluído
+            except queue.Empty:
+                continue
 
     def trace_to_html(self, msg, color, fd):
         msg = msg.replace('=>', '&rArr;')
@@ -348,10 +366,6 @@ CheckFirmwareUpdate\n\nID=1 |ID=2 \n\nID=2 .*Got message\n\n2012-08-31 16:.*(ID=
         color_name = color_table.get(t, "white")  # ('('+t+')', '#FFFFFF')
         msg = GlobalFunctions.remove_accents_from_string(msg)
 
-        self.trace_lock.acquire()
-        if self.screen_trace:
-            self.trace_to_screen(msg, color_name)
-        if self.html_trace:
-            fd = "%04d_%02d_%02d_%02d_%02d_%02d" % (x.year, x.month, x.day, x.hour, x.minute, x.second)
-            self.trace_to_html(msg, color_name, fd)
-        self.trace_lock.release()
+        fd = "%04d_%02d_%02d_%02d_%02d_%02d" % (x.year, x.month, x.day, x.hour, x.minute, x.second)
+        print(f"{msg}")
+        self.trace_queue.put((msg, color_name, fd))

@@ -5,34 +5,39 @@ import sys
 import signal
 import os
 import pathlib
+import subprocess
+import asyncio
+import uvicorn
+    
 # from PyInstaller.utils.hooks import collect_all
 
 from scripts.DatabaseHandler import DatabaseHandler
 from scripts.GlobalFunctions import *
 
-from EmulatorDahua import DahuaEmulator
-from EmulatorHikvision import HikvisionEmulator
+from EmulatorDahua import DahuaEmulator, dahua_still_running_trace_main
+from EmulatorHikvision import HikvisionEmulator, hik_still_running_trace_main
 
 # datas, binaries, hiddenimports = collect_all('pyarmor')
 
-if __name__ == "__main__":
+def main():
     try:
         trace('## Starting Emulator process: v1.0')
         trace(f'Args: {sys.argv}')
         # cwd = pathlib.Path(__file__).parent.resolve()
 
         if len(sys.argv) == 1: ## Debug Mode
-            print("Required: python facial_emulator.py <IP Address> <port> <Device Type>")
+            trace("Required: python facial_emulator.py <IP Address> <port> <Device Type>")
             ip = '172.23.13.159'
-            port = 8025
+            port = 8638
             device_type = 'Dahua'
-            log_init_file = True
+            log_init_file = ".log.ini"
             event_freq = 10 ## Seconds
         else:
             ip = sys.argv[1]
             port = int(sys.argv[2])
             device_type = sys.argv[3]
-            log_init_file = True if sys.argv[4] == '1' else False
+            trace(f"Checking if FastAPI log will be generated")
+            log_init_file = '../../.log.ini' if sys.argv[4] == '1' else False
             if len(sys.argv) == 6:
                 trace('Setting interval to generate fake events')
                 event_freq = int(sys.argv[5]) ## Seconds 
@@ -52,17 +57,26 @@ if __name__ == "__main__":
     except Exception as ex:
         report_exception(ex)
     
-    
     match device_type.upper():
         case "DAHUA":
             d = DahuaEmulator(ip, port, db_handler, event_freq, log_init_file)
             d.start()
-            active_emulator = d
+            threading.Thread(target=dahua_still_running_trace_main).start()
+            
+            # emulator = DahuaEmulator(ip=ip, port=port, db_handler=db_handler, event_freq=event_freq, log_init_file=log_init_file)
+            # emulator.start()
+            # emulator.run_server()
+            # uvicorn.run("EmulatorDahua:app", host=ip, port=port, workers=2)
 
         case "HIKVISION":
             h = HikvisionEmulator(ip, port, db_handler, event_freq, log_init_file)
             h.start()
-            active_emulator = h            
+            threading.Thread(target=hik_still_running_trace_main).start()
+            
+            # emulator = HikvisionEmulator(ip=ip, port=port, db_handler=db_handler, event_freq=event_freq, log_init_file=log_init_file)
+            # emulator.start()
+            # emulator.run_server()
+            # uvicorn.run("HikvisionEmulator:app", host=ip, port=port, workers=2)
         
         case _:
             trace('Nenhum device identificado com este nome, opções possíveis: Dahua e Hikvision.')
@@ -84,6 +98,11 @@ if __name__ == "__main__":
         ## Caso o arquivo com o PID (Process ID do windows) seja excluído, encerrar o processo do Emulador.
         if not os.path.exists("PID"):
             turn_off()
-
+        
         ## Quando o programa é executado no prompt ou no IDE, encerrar o processo no comando "Crtl+C"
         signal.signal(signal.SIGINT, turn_off) 
+
+        trace('facial_emulator: running...')
+
+if __name__ == "__main__":
+    asyncio.run(main())

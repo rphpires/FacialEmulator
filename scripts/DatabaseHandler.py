@@ -23,6 +23,7 @@ class DatabaseHandler(Thread):
         self.db_initialized = False
         self.do_stop = False
         self.requisitions = queue.Queue()
+        self.db_lock = threading.Lock()
 
         self.db_type = database_type
 
@@ -107,33 +108,67 @@ class DatabaseHandler(Thread):
             some_error = False
             self.assert_connection()
             try:
-                if query:
-                    if execute_many:
-                        self.db_cursor.executemany(query, args)
-                    else:
-                        if args:
-                            self.db_cursor.execute(query, args)
+                with self.db_lock:
+                    if query:
+                        if execute_many:
+                            self.db_cursor.executemany(query, args)
                         else:
-                            self.db_cursor.execute(query)
-                if commit:
-                    self.file_connection.commit()
+                            if args:
+                                self.db_cursor.execute(query, args)
+                            else:
+                                self.db_cursor.execute(query)
+                    if commit:
+                        self.file_connection.commit()
+                if result:
+                    x = self.db_cursor.fetchall()
+                    result.put(x)
+                    return len(x)
+                return
+            
             except Exception as e:
                 print("SQL: '%s' %s (%s)" % (query, args, e))
                 self.close_connection()
                 time.sleep(1)
                 some_error = True
-
             if some_error:
                 continue
 
-            if result:
-                x = self.db_cursor.fetchall()
-                result.put(x)
-                return len(x)
-            return
-
         if result:
             result.put("--error--")
+
+    # def execute_query(self, query, args, execute_many, commit, result):
+    #     for _ in range(3):
+    #         some_error = False
+    #         self.assert_connection()
+    #         try:
+
+    #             if query:
+    #                 if execute_many:
+    #                     self.db_cursor.executemany(query, args)
+    #                 else:
+    #                     if args:
+    #                         self.db_cursor.execute(query, args)
+    #                     else:
+    #                         self.db_cursor.execute(query)
+    #             if commit:
+    #                 self.file_connection.commit()
+    #         except Exception as e:
+    #             print("SQL: '%s' %s (%s)" % (query, args, e))
+    #             self.close_connection()
+    #             time.sleep(1)
+    #             some_error = True
+
+    #         if some_error:
+    #             continue
+
+    #         if result:
+    #             x = self.db_cursor.fetchall()
+    #             result.put(x)
+    #             return len(x)
+    #         return
+
+    #     if result:
+    #         result.put("--error--")
 
     def close_connection(self):
         print("close_connection")

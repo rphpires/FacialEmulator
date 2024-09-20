@@ -395,6 +395,89 @@ Content-Disposition: form-data; name="info"\r
             report_exception(ex)
             
 
+# ## ------ TESTES --------
+# async def generate_heartbeat(dahua_emulator):
+#     heartbeat_counter = time.time()
+#     genereted_event_counter = time.time()
+
+#     while True:
+#         try:
+#             trace(f'## StandAlone heartbeat and event')
+#             now = time.time()
+#             if dahua_emulator.generated_event and (now - genereted_event_counter >= dahua_emulator.generated_event_frequency):
+#                 trace(f'>> Sending Generated Fake Event <<')
+#                 try:
+#                     genereted_event_counter= time.time()
+#                     evt_package = dahua_emulator.dahua.generate_random_event()
+
+#                     if evt_package and dahua_emulator.dahua.get_settings("LocalAuthentication") == '1':
+#                         trace('## yield event')
+#                         yield evt_package
+                
+#                 except Exception as ex:
+#                     report_exception(ex)
+
+#             if now - heartbeat_counter >= 10:
+#                 trace('>> Sending Heartbeat <<')
+#                 try:
+#                     heartbeat_counter = now
+#                     yield b'\r\n\r\n\r\n--myboundary\r\nContent-Type: text/plain\r\nContent-Length:9\r\n\r\nHeartbeat'
+                
+#                 except Exception as ex:
+#                     report_exception(ex)
+
+
+#             if dahua_emulator.dahua.get_settings("LocalAuthentication") == '0':
+#                 break
+
+#             await asyncio.sleep(2)
+
+#         except Exception as ex:
+#             report_exception(ex)
+
+# class AsyncGeneratorResponse(StreamingResponse):
+#     def __init__(self, agen):
+#         self.agen = agen
+#         super().__init__(self.iter_content(), media_type="text/event-stream")
+
+#     async def iter_content(self):
+#         try:
+#             while True:
+#                 chunk = await self.agen  # Aguarda o próximo item da fila (agen)
+#                 if chunk is None:
+#                     break  # Se a fila retornar None, finalize o streaming
+#                 yield chunk
+#             # async for chunk in self.agen:
+#             #     yield chunk
+#         except Exception as ex:
+#             report_exception(ex)
+
+# class HeartbeatThread(threading.Thread):
+#     def __init__(self, dahua_emulator):
+#         super().__init__()
+#         self.dahua_emulator = dahua_emulator
+#         self.queue = asyncio.Queue()
+#         self.stop_event = threading.Event()
+
+#     def run(self):
+#         asyncio.run(self.generate_heartbeat_function())
+
+#     async def generate_heartbeat_function(self):
+#         heartbeat_gen = generate_heartbeat(self.dahua_emulator)
+#         async for chunk in heartbeat_gen:
+#             await self.queue.put(chunk)
+#             trace(f"Added chunk to queue: {len(chunk)}")
+#             if self.stop_event.is_set():
+#                 break
+
+#     def stop(self):
+#         self.stop_event.set()
+
+
+# ## ------ TESTES --------
+
+
+
 class DahuaEmulator(threading.Thread):
     def __init__(self, ip, port, db_handler, event_freq, log_init_file) -> None:
         threading.Thread.__init__(self)
@@ -420,7 +503,8 @@ class DahuaEmulator(threading.Thread):
         self.generated_event = True if event_freq >= 1 else False
         trace(f'Generate event? {self.generated_event}')
 
-        # Criando uma instância do FastAPI
+        # self.heartbeat_thread = HeartbeatThread(self)
+        # self.heartbeat_thread.start()
 
         @staticmethod 
         def handle_response(content, response_code = 200, latency_sleep=50):
@@ -436,10 +520,9 @@ class DahuaEmulator(threading.Thread):
                 report_exception(ex)
                 return Response(content='Emulator Error', status_code=response_code)
 
-
         ## Custom endpoint to check emulator status
         @self.app.get('/emulator/get-status')
-        async def get_device_status(request: Request):
+        def get_device_status(request: Request): ## Async
             try:
                 trace("/emulator/get-status: connect")
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -468,7 +551,6 @@ class DahuaEmulator(threading.Thread):
             except Exception as ex:
                 report_exception(ex)
 
-
         ### -------------------------------  MagicBox -----------------------------
         @self.app.get('/cgi-bin/magicBox.cgi')
         async def GetConfigManager(request: Request):
@@ -479,13 +561,12 @@ class DahuaEmulator(threading.Thread):
                         trace('Get Software Version: emulator v1.0')
                         return handle_response("version=Emulator v1.0", latency_sleep=80) 
 
-
             except Exception as ex:
                 report_exception(ex)    
 
         ### -------------------------------  configManager -----------------------------
         @self.app.get('/cgi-bin/configManager.cgi')
-        async def GetConfigManager(request: Request):
+        def GetConfigManager(request: Request): ## Async
             try:
                 action = request.query_params["action"]
                 match action:
@@ -541,7 +622,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
 
         ### ------------------------------- FaceInfoManager -----------------------------
         @self.app.get('/cgi-bin/FaceInfoManager.cgi')
-        async def GetFaceInfoManager(request: Request):
+        def GetFaceInfoManager(request: Request):  ## Async
             # {"action": "doFind", "Token": token, "Offset": offset, "Count": slice_size }
             action = request.query_params["action"]
             try:
@@ -572,7 +653,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
                 print(ex)
 
         @self.app.post("/cgi-bin/FaceInfoManager.cgi")
-        async def PostFaceInfoManager(request: Request, str = Body(...)):
+        def PostFaceInfoManager(request: Request, str = Body(...)):  ## Async
             action = request.query_params["action"]
             UserID = str["UserID"]
             _photo = str["Info"].get("PhotoData", [""])
@@ -608,8 +689,8 @@ table.Network.eth0.SubnetMask=255.255.248.0
                 print(ex)
 
         ### ------------------------------- recordFinder -----------------------------
-        @self.app.get('/cgi-bin/recordFinder.cgi')
-        async def GetRecordFinder(
+        @self.app.get('/cgi-bin/recordFinder.cgi')  ## Async
+        def GetRecordFinder(
             action: str, 
             name: str, 
             offset: str = None, 
@@ -633,7 +714,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
 
         ### ------------------------------- recordUpdater -----------------------------
         @self.app.get('/cgi-bin/recordUpdater.cgi')
-        async def GetRecordUpdater(request: Request):
+        def GetRecordUpdater(request: Request):  ## Async
             try:
                 trace(f'[GET] /recordUpdater.cgi: {request.query_params}')
                 action = request.query_params["action"]
@@ -661,7 +742,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
                 print(ex)
 
         @self.app.post("/cgi-bin/recordUpdater.cgi")
-        async def PostRecordUpdater(request: Request):
+        def PostRecordUpdater(request: Request): ## Async
             trace(f'/recordUpdater.cgi: {request.query_params}')
             action = request.query_params["action"]
             try:                
@@ -684,6 +765,15 @@ table.Network.eth0.SubnetMask=255.255.248.0
                 print(ex)
     
         ### ------------------------------- SnapManager -----------------------------
+        @self.app.get("/cgi-bin/snapManager.cgi")
+        async def heartbeat(request: Request):
+            try:
+                trace("[GET] /cgi-bin/snapManager.cgi")
+                return AsyncGeneratorResponse(self.generate_heartbeat())
+
+            except Exception as ex:
+                report_exception(ex)
+
         class AsyncGeneratorResponse(StreamingResponse):
             def __init__(self, agen):
                 self.agen = agen
@@ -698,23 +788,13 @@ table.Network.eth0.SubnetMask=255.255.248.0
                         report_exception(ex)
 
 
-        @self.app.get("/cgi-bin/snapManager.cgi")
-        async def heartbeat(request: Request):
-            try:
-                trace("[GET] /cgi-bin/snapManager.cgi")
-                return AsyncGeneratorResponse(self.generate_heartbeat())
-
-            except Exception as ex:
-                        report_exception(ex)
-
-
     async def generate_heartbeat(self):
         heartbeat_counter = time.time()
         self.genereted_event_counter = time.time()
 
         while True:
             try:
-                trace(f'## StandAlone heartbeat and event')
+                # trace(f'## StandAlone heartbeat and event')
                 now = time.time()
                 if self.generated_event and (now - self.genereted_event_counter >= self.generated_event_frequency):
                     trace(f'>> Sending Generated Fake Event <<')
@@ -752,6 +832,9 @@ table.Network.eth0.SubnetMask=255.255.248.0
     ### ------------------------ Online events ---------------------------
     ### ------------------------------------------------------------------
     def generate_online_event(self):
+        if self.dahua.get_settings("LocalAuthentication") == '1':
+            return
+        
         trace('Generating online event.')
         try:
             evt_package, event_reply = self.dahua.generate_online_event(self.mac_address)
@@ -759,7 +842,7 @@ table.Network.eth0.SubnetMask=255.255.248.0
             report_exception(ex)
             return False
         
-        if evt_package and self.dahua.get_settings("LocalAuthentication") == '0':
+        if evt_package:
             try:
                 trace(f"Sending online event to server: {self.remote_server_url}/notification")
                 gen_evt = requests.post(self.remote_server_url + '/notification', data=evt_package, timeout=5)
@@ -787,7 +870,8 @@ table.Network.eth0.SubnetMask=255.255.248.0
 
     def scheduler(self):
         schedule.every(self.generated_event_frequency).seconds.do(self.generate_online_event)
-        schedule.every(5).minutes.do(still_running_trace)
+        # schedule.every(5).minutes.do(dahua_still_running_trace_class)
+        schedule.every(5).seconds.do(dahua_still_running_trace_class, class_em=self )
 
         while True:
             try:
@@ -810,21 +894,42 @@ table.Network.eth0.SubnetMask=255.255.248.0
         try:
             ## WebServer innitialization...
             trace(f"Starting FastAPI webServer: IP={self.ip}, Port={self.port} | FastAPI log is enabled: {self.log_init}")
+            
             if self.log_init:
-                uvicorn.run(self.app, host=self.ip, port=self.port, log_config='../../.log.ini')
+                uvicorn.run(self.app, host=self.ip, port=self.port, log_config=self.log_init)
             else:
                 uvicorn.run(self.app, host=self.ip, port=self.port)
 
         except Exception as ex:
             report_exception(ex)
 
-        
-def still_running_trace():
-    trace('Emulator is still running')
+    def run_server(self):
+        try:
+            uvicorn.run("EmulatorDahua:app", host=self.ip, port=self.port)
+        except Exception as ex:
+            report_exception(ex)
 
+
+def dahua_still_running_trace_class(class_em: DahuaEmulator):
+    trace(f'DahuaEmulator: Emulator is still running | {class_em.mac_address} | {class_em.app.version} | {class_em.is_alive()}')
+
+def dahua_still_running_trace_main():
+    while True:
+        trace('Main: Emulator is still running')
+        time.sleep(5)
 
 if __name__ == "__main__":
-    port=77
-    d = DahuaEmulator(port)
-    cwd = pathlib.Path(__file__).parent.resolve()
-    uvicorn.run(d.app, host="localhost", port=port)
+    from scripts.DatabaseHandler import DatabaseHandler
+
+    db_handler = DatabaseHandler('emulator')
+    db_handler.start()
+
+    ip = '172.23.13.159'
+    port = 8638
+    device_type = 'Dahua'
+    log_init_file = ".log.ini"
+    event_freq = 10 ## Seconds
+    
+    trace('[DEBUG] Starting DahuaEMulator')
+    d = DahuaEmulator(ip, port, db_handler, event_freq, log_init_file)
+    d.start()

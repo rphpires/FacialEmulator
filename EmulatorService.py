@@ -393,6 +393,8 @@ select LocalControllerID, Name, IpAddress, Port, Model, Status, Enabled, EventIn
         for process, port in processes:
             try:
                 stdout, stderr = process.communicate()
+                time.sleep(0.2)
+                
             except Exception as ex:
                 report_exception(ex)
 
