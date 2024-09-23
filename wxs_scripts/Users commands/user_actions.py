@@ -167,6 +167,7 @@ WHERE m.CHID in (select CHID from CHCards where IPRdrUserID is not null)
     for chid, name in get_chids:
         try:
             insert_script += f"INSERT INTO CHAccessLevels values({chid}, {access_level_id}, null, null);\n"
+            insert_script += f"UPDATE CHMain SET CHDownloadRequired = 1 WHERE CHID = {chid};\n"
         except Exception as ex:
             print(f"** Erro: {ex}")
 
