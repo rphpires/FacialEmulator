@@ -11,3 +11,7 @@ wxs_scripts/build
 wxs_scripts/dist
 .env
 Traces
+@ Script
+logfile.log
+delete_content.sh
+wxs_scripts
